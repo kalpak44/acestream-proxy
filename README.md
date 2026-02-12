@@ -1,4 +1,3 @@
-````md
 # acestream-proxy
 
 Minimal HTTP service that aggregates multiple `search-ace.stream` categories into **one** M3U playlist and rewrites the header to include EPG.
