@@ -1,14 +1,15 @@
-from typing import List, Optional
+from typing import List
 
 import httpx
-from fastapi import FastAPI, Query, Response
+import ipaddress
+from fastapi import FastAPI, Query, Response, HTTPException
 
 UPSTREAM_BASE = "https://search-ace.stream/playlist"
 
 DEFAULT_ENGINE_IP = "192.168.1.50"
-DEFAULT_ENGINE_PORT = "6878"
+DEFAULT_ENGINE_PORT = 6878
 
-DEFAULT_CATEGORIES = [
+CATEGORIES = [
     "informational",
     "entertaining",
     "educational",
@@ -33,11 +34,24 @@ HEADER = '#EXTM3U catchup="flussonic" url-tvg="https://ip-tv.dev/epg/epg.xml.gz"
 app = FastAPI()
 
 
-async def fetch_category(client, category: str, engine_ip: str, engine_port: str):
+def validate_engine_ip(value: str) -> str:
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"Invalid engine_ip: {value}") from e
+
+
+async def fetch_category(
+    client: httpx.AsyncClient,
+    category: str,
+    engine_ip: str,
+    engine_port: int,
+) -> str:
     params = {
         "category": category,
         "engine_ip": engine_ip,
-        "engine_port": engine_port,
+        "engine_port": str(engine_port),
     }
     r = await client.get(UPSTREAM_BASE, params=params)
     r.raise_for_status()
@@ -45,55 +59,60 @@ async def fetch_category(client, category: str, engine_ip: str, engine_port: str
 
 
 def transform_playlist(content: str, category: str) -> List[str]:
+    """
+    Input example:
+      #EXTM3U
+      #EXTINF:-1,Abu Dhabi Sports 1
+      http://...
+    Output for each channel:
+      #EXTINF:0,Abu Dhabi Sports 1
+      #EXTGRP:sport
+      http://...
+    """
     lines = content.splitlines()
-    output = []
+    out: List[str] = []
 
     i = 0
     while i < len(lines):
         line = lines[i].strip()
 
+        # Skip upstream header and empty lines
+        if not line or line.startswith("#EXTM3U"):
+            i += 1
+            continue
+
         if line.startswith("#EXTINF"):
-            # Modify EXTINF duration to 0 instead of -1
-            extinf = line.replace("#EXTINF:-1", "#EXTINF:0")
+            extinf = line.replace("#EXTINF:-1", "#EXTINF:0", 1)
+            out.append(extinf)
+            out.append(f"#EXTGRP:{category}")
 
-            output.append(extinf)
-
-            # Add group
-            output.append(f"#EXTGRP:{category}")
-
-            # Add next line (URL)
+            # Next line should be URL
             if i + 1 < len(lines):
-                output.append(lines[i + 1].strip())
-                i += 1
+                url = lines[i + 1].strip()
+                if url and not url.startswith("#"):
+                    out.append(url)
+                    i += 1
 
         i += 1
 
-    return output
+    return out
 
 
 @app.get("/playlist")
 async def playlist(
-    engine_ip: str = Query(DEFAULT_ENGINE_IP),
-    engine_port: str = Query(DEFAULT_ENGINE_PORT),
-    categories: Optional[str] = Query(None),
+    engine_ip: str = Query(DEFAULT_ENGINE_IP, description="Ace engine IP address"),
+    engine_port: int = Query(
+        DEFAULT_ENGINE_PORT, ge=1, le=65535, description="Ace engine port (1-65535)"
+    ),
 ):
-    category_list = (
-        [c.strip() for c in categories.split(",")]
-        if categories
-        else DEFAULT_CATEGORIES
-    )
+    engine_ip = validate_engine_ip(engine_ip)
 
-    combined_lines = [HEADER]
+    combined: List[str] = [HEADER]
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        for category in category_list:
+        for category in CATEGORIES:
             content = await fetch_category(client, category, engine_ip, engine_port)
-            transformed = transform_playlist(content, category)
-            combined_lines.extend(transformed)
+            combined.extend(transform_playlist(content, category))
 
-    final_playlist = "\n".join(combined_lines) + "\n"
-
-    return Response(
-        content=final_playlist,
-        media_type="application/x-mpegURL; charset=utf-8",
-    )
+    final = "\n".join(combined) + "\n"
+    return Response(content=final, media_type="application/x-mpegURL; charset=utf-8")
