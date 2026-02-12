@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 from fastapi import FastAPI, Query, Response
@@ -8,51 +8,92 @@ UPSTREAM_BASE = "https://search-ace.stream/playlist"
 DEFAULT_ENGINE_IP = "192.168.1.50"
 DEFAULT_ENGINE_PORT = "6878"
 
-REPLACEMENT_HEADER = '#EXTM3U catchup="flussonic" url-tvg="https://ip-tv.dev/epg/epg.xml.gz"'
+DEFAULT_CATEGORIES = [
+    "informational",
+    "entertaining",
+    "educational",
+    "movies",
+    "documentaries",
+    "sport",
+    "fashion",
+    "music",
+    "regional",
+    "ethnic",
+    "religion",
+    "teleshop",
+    "erotic_18_plus",
+    "other_18_plus",
+    "cyber_games",
+    "amateur",
+    "webcam",
+]
+
+HEADER = '#EXTM3U catchup="flussonic" url-tvg="https://ip-tv.dev/epg/epg.xml.gz"'
 
 app = FastAPI()
 
 
-def patch_first_line(text: str) -> str:
-    text = text.lstrip("\ufeff")
-    lines = text.splitlines(True)  # keep original line endings
+async def fetch_category(client, category: str, engine_ip: str, engine_port: str):
+    params = {
+        "category": category,
+        "engine_ip": engine_ip,
+        "engine_port": engine_port,
+    }
+    r = await client.get(UPSTREAM_BASE, params=params)
+    r.raise_for_status()
+    return r.text
 
-    if not lines:
-        return REPLACEMENT_HEADER + "\n"
 
-    first = lines[0]
+def transform_playlist(content: str, category: str) -> List[str]:
+    lines = content.splitlines()
+    output = []
 
-    newline = ""
-    if first.endswith("\r\n"):
-        newline = "\r\n"
-    elif first.endswith("\n"):
-        newline = "\n"
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
 
-    if first.strip().startswith("#EXTM3U"):
-        lines[0] = REPLACEMENT_HEADER + newline
-    else:
-        lines.insert(0, REPLACEMENT_HEADER + "\n")
+        if line.startswith("#EXTINF"):
+            # Modify EXTINF duration to 0 instead of -1
+            extinf = line.replace("#EXTINF:-1", "#EXTINF:0")
 
-    return "".join(lines)
+            output.append(extinf)
+
+            # Add group
+            output.append(f"#EXTGRP:{category}")
+
+            # Add next line (URL)
+            if i + 1 < len(lines):
+                output.append(lines[i + 1].strip())
+                i += 1
+
+        i += 1
+
+    return output
 
 
 @app.get("/playlist")
 async def playlist(
-    engine_ip: Optional[str] = Query(DEFAULT_ENGINE_IP),
-    engine_port: Optional[str] = Query(DEFAULT_ENGINE_PORT),
+    engine_ip: str = Query(DEFAULT_ENGINE_IP),
+    engine_port: str = Query(DEFAULT_ENGINE_PORT),
+    categories: Optional[str] = Query(None),
 ):
-    params = {
-        "engine_ip": engine_ip,
-        "engine_port": engine_port,
-    }
+    category_list = (
+        [c.strip() for c in categories.split(",")]
+        if categories
+        else DEFAULT_CATEGORIES
+    )
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(UPSTREAM_BASE, params=params)
-        response.raise_for_status()
+    combined_lines = [HEADER]
 
-    patched = patch_first_line(response.text)
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for category in category_list:
+            content = await fetch_category(client, category, engine_ip, engine_port)
+            transformed = transform_playlist(content, category)
+            combined_lines.extend(transformed)
+
+    final_playlist = "\n".join(combined_lines) + "\n"
 
     return Response(
-        content=patched,
+        content=final_playlist,
         media_type="application/x-mpegURL; charset=utf-8",
     )
