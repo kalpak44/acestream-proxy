@@ -9,49 +9,47 @@ from fastapi import FastAPI, Query, Response, HTTPException, Request
 UPSTREAM_BASE = "https://search-ace.stream/playlist"
 
 DEFAULT_ENGINE_IP = "192.168.1.50"
-DEFAULT_ENGINE_PORT = 6878
+DEFAULT_ENGINE_PORT = 6878"
 
-# Fixed set
-CATEGORIES = [
-    "informational",
-    "entertaining",
-    "educational",
-    "movies",
-    "documentaries",
-    "sport",
-    "fashion",
-    "music",
-    "regional",
-    "ethnic",
-    "religion",
-    "teleshop",
-    "erotic_18_plus",
-    "other_18_plus",
-    "cyber_games",
-    "amateur",
-    "webcam",
-]
+# Upstream category -> Russian group name
+CATEGORY_GROUPS_RU = {
+    "informational": "Информационные",
+    "entertaining": "Развлекательные",
+    "educational": "Образовательные",
+    "movies": "Фильмы",
+    "documentaries": "Документальные",
+    "sport": "Спорт",
+    "fashion": "Мода",
+    "music": "Музыка",
+    "regional": "Региональные",
+    "ethnic": "Этнические",
+    "religion": "Религия",
+    "teleshop": "Телемагазин",
+    "erotic_18_plus": "Эротика 18+",
+    "other_18_plus": "Для взрослых 18+",
+    "cyber_games": "Киберспорт",
+    "amateur": "Любительские",
+    "webcam": "Вебкам",
+}
 
 HEADER = '#EXTM3U catchup="flussonic" url-tvg="https://ip-tv.dev/epg/epg.xml.gz"'
 
 # Cache: (ip, port) -> (expires_at, payload_bytes)
 CACHE: Dict[Tuple[str, int], Tuple[float, bytes]] = {}
-CACHE_TTL_SECONDS = 30  # keep small; iptv.online uses max-age=1, but 30s helps speed a lot
+CACHE_TTL_SECONDS = 30
 
-# Prevent auto-redirects (some clients hate 307/308)
 app = FastAPI(redirect_slashes=False)
 
 
 def validate_engine_ip(value: str) -> str:
     try:
-        ipaddress.ip_address(value)  # IPv4/IPv6
+        ipaddress.ip_address(value)
         return value
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"Invalid engine_ip: {value}") from e
 
 
 def response_headers() -> dict:
-    # Match iptv.online style as close as practical
     return {
         "access-control-allow-origin": "*",
         "cache-control": "max-age=1, private, must-revalidate",
@@ -61,17 +59,7 @@ def response_headers() -> dict:
     }
 
 
-def transform_playlist(content: str, category: str) -> List[str]:
-    """
-    Upstream:
-      #EXTM3U
-      #EXTINF:-1,Name
-      http://...
-    Output:
-      #EXTINF:0,Name
-      #EXTGRP:<category>
-      http://...
-    """
+def transform_playlist(content: str, group_name: str) -> List[str]:
     lines = content.splitlines()
     out: List[str] = []
 
@@ -85,7 +73,7 @@ def transform_playlist(content: str, category: str) -> List[str]:
 
         if line.startswith("#EXTINF"):
             out.append(line.replace("#EXTINF:-1", "#EXTINF:0", 1))
-            out.append(f"#EXTGRP:{category}")
+            out.append(f"#EXTGRP:{group_name}")
 
             if i + 1 < len(lines):
                 url = lines[i + 1].strip()
@@ -104,7 +92,11 @@ async def fetch_category(
     engine_ip: str,
     engine_port: int,
 ) -> str:
-    params = {"category": category, "engine_ip": engine_ip, "engine_port": str(engine_port)}
+    params = {
+        "category": category,
+        "engine_ip": engine_ip,
+        "engine_port": str(engine_port),
+    }
     r = await client.get(UPSTREAM_BASE, params=params, follow_redirects=True)
     r.raise_for_status()
     return r.text
@@ -119,19 +111,22 @@ async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
         return cached[1]
 
     timeout = httpx.Timeout(connect=8.0, read=20.0, write=8.0, pool=8.0)
+
     async with httpx.AsyncClient(timeout=timeout) as client:
-        tasks = [fetch_category(client, cat, engine_ip, engine_port) for cat in CATEGORIES]
+        tasks = [
+            fetch_category(client, category, engine_ip, engine_port)
+            for category in CATEGORY_GROUPS_RU.keys()
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     combined: List[str] = [HEADER]
 
-    for cat, res in zip(CATEGORIES, results):
-        if isinstance(res, Exception):
-            # skip failed category (don’t kill whole playlist)
+    for (category, group_name), result in zip(CATEGORY_GROUPS_RU.items(), results):
+        if isinstance(result, Exception):
             continue
-        combined.extend(transform_playlist(res, cat))
 
-    # CRLF for max IPTV/VLC compatibility
+        combined.extend(transform_playlist(result, group_name))
+
     final = "\r\n".join(combined) + "\r\n"
     payload = final.encode("utf-8")
 
@@ -152,13 +147,11 @@ async def playlist(
 
     return Response(
         content=body,
-        # iptv.online uses application/octet-stream
         media_type="application/octet-stream",
         headers=response_headers(),
     )
 
 
-# Optional: also serve trailing-slash without redirect
 @app.api_route("/playlist/", methods=["GET", "HEAD"])
 async def playlist_slash(
     request: Request,
