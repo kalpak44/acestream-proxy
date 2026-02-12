@@ -1,7 +1,7 @@
 from typing import List
+import ipaddress
 
 import httpx
-import ipaddress
 from fastapi import FastAPI, Query, Response, HTTPException
 
 UPSTREAM_BASE = "https://search-ace.stream/playlist"
@@ -60,14 +60,11 @@ async def fetch_category(
 
 def transform_playlist(content: str, category: str) -> List[str]:
     """
-    Input example:
-      #EXTM3U
-      #EXTINF:-1,Abu Dhabi Sports 1
-      http://...
-    Output for each channel:
-      #EXTINF:0,Abu Dhabi Sports 1
-      #EXTGRP:sport
-      http://...
+    Transforms upstream playlist into:
+      #EXTINF:0,...
+      #EXTGRP:<category>
+      <url>
+    Skips upstream #EXTM3U header lines.
     """
     lines = content.splitlines()
     out: List[str] = []
@@ -76,7 +73,6 @@ def transform_playlist(content: str, category: str) -> List[str]:
     while i < len(lines):
         line = lines[i].strip()
 
-        # Skip upstream header and empty lines
         if not line or line.startswith("#EXTM3U"):
             i += 1
             continue
@@ -86,11 +82,11 @@ def transform_playlist(content: str, category: str) -> List[str]:
             out.append(extinf)
             out.append(f"#EXTGRP:{category}")
 
-            # Next line should be URL
+            # Next line should be a URL; include it if present
             if i + 1 < len(lines):
-                url = lines[i + 1].strip()
-                if url and not url.startswith("#"):
-                    out.append(url)
+                nxt = lines[i + 1].strip()
+                if nxt and not nxt.startswith("#"):
+                    out.append(nxt)
                     i += 1
 
         i += 1
@@ -114,5 +110,18 @@ async def playlist(
             content = await fetch_category(client, category, engine_ip, engine_port)
             combined.extend(transform_playlist(content, category))
 
-    final = "\n".join(combined) + "\n"
-    return Response(content=final, media_type="application/x-mpegURL; charset=utf-8")
+    # Use CRLF for maximum IPTV/VLC compatibility
+    final = "\r\n".join(combined) + "\r\n"
+
+    return Response(
+        content=final.encode("utf-8"),
+        media_type="application/vnd.apple.mpegurl",
+        headers={
+            "Content-Disposition": 'inline; filename="playlist.m3u8"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Access-Control-Allow-Origin": "*",
+            "Accept-Ranges": "bytes",
+        },
+    )
