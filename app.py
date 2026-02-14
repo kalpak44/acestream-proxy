@@ -1,7 +1,9 @@
+# app.py
 import asyncio
 import time
 import ipaddress
 from typing import Dict, List, Tuple
+from urllib.parse import urlparse, parse_qs
 
 import httpx
 from fastapi import FastAPI, Query, Response, HTTPException, Request
@@ -89,9 +91,42 @@ def response_headers() -> dict:
     }
 
 
-def transform_playlist(content: str, group_name: str) -> List[str]:
+def rewrite_acestream_url(url: str, engine_ip: str, engine_port: int) -> str:
     """
-    Transform upstream playlist format into IPTV-friendly format.
+    Rewrite Ace Stream engine URL from getstream to manifest.m3u8.
+
+    Input (example):
+      http://192.168.1.50:6878/ace/getstream?infohash=...&pid=1
+
+    Output:
+      http://192.168.1.50:6878/ace/manifest.m3u8?id=...
+    """
+    try:
+        p = urlparse(url)
+
+        # Only rewrite Ace engine getstream URLs
+        if p.path.rstrip("/") != "/ace/getstream":
+            return url
+
+        qs = parse_qs(p.query)
+        infohash_list = qs.get("infohash")
+        if not infohash_list:
+            return url
+
+        infohash = infohash_list[0].strip()
+        if not infohash:
+            return url
+
+        return f"http://{engine_ip}:{engine_port}/ace/manifest.m3u8?id={infohash}"
+    except Exception:
+        # If anything looks odd, keep original URL
+        return url
+
+
+def transform_playlist(content: str, group_name: str, engine_ip: str, engine_port: int) -> List[str]:
+    """
+    Transform upstream playlist format into IPTV-friendly format and
+    rewrite Ace Stream engine URLs to manifest.m3u8.
 
     Upstream example:
         #EXTM3U
@@ -101,7 +136,7 @@ def transform_playlist(content: str, group_name: str) -> List[str]:
     Output:
         #EXTINF:0,Channel Name
         #EXTGRP:<Russian Group Name>
-        http://stream-url
+        http://stream-url (rewritten if Ace getstream)
     """
     lines = content.splitlines()
     out: List[str] = []
@@ -127,6 +162,7 @@ def transform_playlist(content: str, group_name: str) -> List[str]:
             if i + 1 < len(lines):
                 url = lines[i + 1].strip()
                 if url and not url.startswith("#"):
+                    url = rewrite_acestream_url(url, engine_ip, engine_port)
                     out.append(url)
                     i += 1
 
@@ -163,7 +199,7 @@ async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
     """
     Build combined playlist by:
         1. Fetching all categories concurrently
-        2. Transforming them
+        2. Transforming them (+ URL rewrite)
         3. Concatenating into a single M3U file
         4. Caching result
     """
@@ -195,7 +231,7 @@ async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
             # Skip failed category without failing entire playlist
             continue
 
-        combined.extend(transform_playlist(result, group_name))
+        combined.extend(transform_playlist(result, group_name, engine_ip, engine_port))
 
     # Use CRLF for maximum IPTV compatibility
     final = "\r\n".join(combined) + "\r\n"
