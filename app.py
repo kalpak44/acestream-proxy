@@ -184,6 +184,7 @@ def transform_playlist(content: str, group_name: str) -> List[str]:
 async def fetch_category(
     client: httpx.AsyncClient,
     category: str,
+    extra_params: dict = None,
 ) -> str:
     """
     Fetch a single category playlist from upstream.
@@ -191,13 +192,15 @@ async def fetch_category(
     params = {
         "category": category,
     }
+    if extra_params:
+        params.update(extra_params)
 
     response = await client.get(UPSTREAM_BASE, params=params, follow_redirects=True)
     response.raise_for_status()
     return response.text
 
 
-async def build_playlist() -> bytes:
+async def build_playlist(extra_params: dict = None) -> bytes:
     """
     Build combined playlist by:
         1. Fetching all categories concurrently
@@ -205,7 +208,8 @@ async def build_playlist() -> bytes:
         3. Concatenating into a single M3U file
         4. Caching result
     """
-    cache_key = "default"
+    # Cache key should now include query parameters to avoid serving wrong playlist
+    cache_key = f"playlist:{urlencode(sorted(extra_params.items()))}" if extra_params else "default"
     now = time.time()
 
     # Serve from cache if valid
@@ -220,7 +224,7 @@ async def build_playlist() -> bytes:
 
         # Fetch all categories concurrently
         tasks = [
-            fetch_category(client, category)
+            fetch_category(client, category, extra_params)
             for category, _ in pairs
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -255,7 +259,8 @@ async def playlist(request: Request):
     Main endpoint.
     Returns combined M3U playlist.
     """
-    payload = await build_playlist()
+    extra_params = dict(request.query_params)
+    payload = await build_playlist(extra_params)
     body = b"" if request.method == "HEAD" else payload
 
     return Response(
@@ -271,7 +276,8 @@ async def playlist_slash(request: Request):
     Same as /playlist but without redirect for trailing slash.
     Some IPTV clients break on redirects.
     """
-    payload = await build_playlist()
+    extra_params = dict(request.query_params)
+    payload = await build_playlist(extra_params)
     body = b"" if request.method == "HEAD" else payload
 
     return Response(
@@ -287,7 +293,8 @@ async def playlist_m3u8(request: Request):
     Standard IPTV M3U playlist extension.
     Some players require .m3u8 extension.
     """
-    payload = await build_playlist()
+    extra_params = dict(request.query_params)
+    payload = await build_playlist(extra_params)
     body = b"" if request.method == "HEAD" else payload
 
     return Response(
