@@ -104,11 +104,10 @@ def rewrite_acestream_url(url: str) -> str:
         if not infohash:
             return url
 
-        # Map 'infohash' to 'id' for the new URL
+        # Preserve original query parameters exactly as received (no renaming)
         new_qs = qs.copy()
-        new_qs["id"] = new_qs.pop("infohash")
 
-        # Encode the query parameters back
+        # Encode the query parameters back unchanged
         new_query = urlencode(new_qs, doseq=True)
 
         # Construct the new URL
