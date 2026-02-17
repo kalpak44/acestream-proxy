@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+LABEL maintainer="Pavel Usanli <pavel@usanli.online>"
+LABEL description="Ace Stream Proxy - transforms and rewrites Ace Stream M3U playlists"
+LABEL org.opencontainers.image.source="https://github.com/pavel-usanli/acestream-proxy"
+
 WORKDIR /app
 
 COPY requirements.txt .
