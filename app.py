@@ -3,7 +3,7 @@ import asyncio
 import time
 import ipaddress
 from typing import Dict, List, Tuple
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 import httpx
 from fastapi import FastAPI, Query, Response, HTTPException, Request
@@ -104,7 +104,26 @@ def rewrite_acestream_url(url: str) -> str:
         if not infohash:
             return url
 
-        return f"{ENGINE_BASE_URL}/ace/manifest.m3u8?id={infohash}"
+        # Map 'infohash' to 'id' for the new URL
+        new_qs = qs.copy()
+        new_qs["id"] = new_qs.pop("infohash")
+
+        # Encode the query parameters back
+        new_query = urlencode(new_qs, doseq=True)
+
+        # Construct the new URL
+        # We replace the scheme, netloc, path and query
+        new_url_parts = list(p)
+        
+        # Parse ENGINE_BASE_URL to get its components
+        engine_p = urlparse(ENGINE_BASE_URL)
+        
+        new_url_parts[0] = engine_p.scheme  # scheme
+        new_url_parts[1] = engine_p.netloc  # netloc
+        new_url_parts[2] = "/ace/manifest.m3u8" # path
+        new_url_parts[4] = new_query # query
+        
+        return urlunparse(new_url_parts)
     except Exception:
         # If anything looks odd, keep original URL
         return url
