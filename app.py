@@ -81,12 +81,13 @@ def response_headers() -> dict:
 def rewrite_acestream_url(url: str) -> str:
     """
     Rewrite Ace Stream engine URL from getstream to manifest.m3u8.
+    All original query parameters are preserved and appended to the new URL.
 
     Input (example):
-      http://192.168.1.50:6878/ace/getstream?infohash=...&pid=1
+      http://127.0.0.1:6878/ace/getstream?infohash=...&pid=1
 
     Output:
-      https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?id=...
+      https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?infohash=...&pid=1
     """
     try:
         p = urlparse(url)
@@ -141,7 +142,7 @@ def transform_playlist(content: str, group_name: str) -> List[str]:
     Output:
         #EXTINF:0,Channel Name
         #EXTGRP:<Russian Group Name>
-        https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?id=... (rewritten if Ace getstream)
+        https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?infohash=... (rewritten if Ace getstream)
     """
     lines = content.splitlines()
     out: List[str] = []
@@ -187,6 +188,11 @@ async def fetch_category(
 ) -> str:
     """
     Fetch a single category playlist from upstream.
+
+    Args:
+        client: Async HTTPX client.
+        category: Upstream category name.
+        extra_params: Optional query parameters to pass to upstream.
     """
     params = {
         "category": category,
@@ -206,6 +212,13 @@ async def build_playlist(extra_params: dict = None) -> bytes:
         2. Transforming them (+ URL rewrite)
         3. Concatenating into a single M3U file
         4. Caching result
+
+    The cache key includes sorted query parameters to ensure correct isolation
+    between requests with different extra parameters (e.g., auth tokens).
+
+    Args:
+        extra_params: Optional query parameters to forward to upstream and
+                      include in the cache key.
     """
     # Cache key should now include query parameters to avoid serving wrong playlist
     cache_key = f"playlist:{urlencode(sorted(extra_params.items()))}" if extra_params else "default"
@@ -255,8 +268,9 @@ async def build_playlist(extra_params: dict = None) -> bytes:
 @app.api_route("/playlist", methods=["GET", "HEAD"])
 async def playlist(request: Request):
     """
-    Main endpoint.
-    Returns combined M3U playlist.
+    Main endpoint. Returns combined M3U playlist.
+    All incoming query parameters are forwarded to the upstream service
+    and factored into the cache key.
     """
     extra_params = dict(request.query_params)
     payload = await build_playlist(extra_params)
@@ -272,8 +286,8 @@ async def playlist(request: Request):
 @app.api_route("/playlist/", methods=["GET", "HEAD"])
 async def playlist_slash(request: Request):
     """
-    Same as /playlist but without redirect for trailing slash.
-    Some IPTV clients break on redirects.
+    Alternative endpoint for trailing slash. Returns combined M3U playlist.
+    All incoming query parameters are forwarded to the upstream service.
     """
     extra_params = dict(request.query_params)
     payload = await build_playlist(extra_params)
@@ -289,8 +303,8 @@ async def playlist_slash(request: Request):
 @app.api_route("/playlist.m3u8", methods=["GET", "HEAD"])
 async def playlist_m3u8(request: Request):
     """
-    Standard IPTV M3U playlist extension.
-    Some players require .m3u8 extension.
+    Standard IPTV M3U playlist extension endpoint.
+    All incoming query parameters are forwarded to the upstream service.
     """
     extra_params = dict(request.query_params)
     payload = await build_playlist(extra_params)
