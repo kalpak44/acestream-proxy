@@ -17,5 +17,5 @@ curl "http://localhost:8000/playlist.m3u8"
 Use deployments: 
 
 ```bash
-curl https://iptv.pavel-usanli.online/playlist.m3u8
+curl "https://iptv.pavel-usanli.online/playlist.m3u8"
 ```
