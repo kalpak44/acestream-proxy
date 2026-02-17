@@ -16,9 +16,8 @@ from fastapi import FastAPI, Query, Response, HTTPException, Request
 # Upstream service that returns category-based M3U playlists
 UPSTREAM_BASE = "https://search-ace.stream/playlist"
 
-# Default Ace Stream engine connection values
-DEFAULT_ENGINE_IP = "192.168.1.50"
-DEFAULT_ENGINE_PORT = 6878
+# Hardcoded Ace Stream engine connection value
+ENGINE_BASE_URL = "https://streaming-television.pavel-usanli.online"
 
 # Mapping:
 #   key   -> upstream category name (used in API request)
@@ -49,11 +48,11 @@ HEADER = '#EXTM3U catchup="flussonic" url-tvg="https://ip-tv.dev/epg/epg.xml.gz"
 
 # ---------------------------------------------------------------------------
 # Simple in-memory cache
-#   Key:   (engine_ip, engine_port)
+#   Key:   None (since we removed params, we have a single entry)
 #   Value: (expires_timestamp, playlist_bytes)
 # ---------------------------------------------------------------------------
 
-CACHE: Dict[Tuple[str, int], Tuple[float, bytes]] = {}
+CACHE: Dict[str, Tuple[float, bytes]] = {}
 CACHE_TTL_SECONDS = 30  # small TTL improves performance without going stale
 
 
@@ -64,18 +63,6 @@ app = FastAPI(redirect_slashes=False)
 # ---------------------------------------------------------------------------
 # Utility Functions
 # ---------------------------------------------------------------------------
-
-def validate_engine_ip(value: str) -> str:
-    """
-    Validate that engine_ip is a valid IPv4 or IPv6 address.
-    Raises HTTP 422 if invalid.
-    """
-    try:
-        ipaddress.ip_address(value)
-        return value
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=f"Invalid engine_ip: {value}") from e
-
 
 def response_headers() -> dict:
     """
@@ -91,7 +78,7 @@ def response_headers() -> dict:
     }
 
 
-def rewrite_acestream_url(url: str, engine_ip: str, engine_port: int) -> str:
+def rewrite_acestream_url(url: str) -> str:
     """
     Rewrite Ace Stream engine URL from getstream to manifest.m3u8.
 
@@ -99,7 +86,7 @@ def rewrite_acestream_url(url: str, engine_ip: str, engine_port: int) -> str:
       http://192.168.1.50:6878/ace/getstream?infohash=...&pid=1
 
     Output:
-      http://192.168.1.50:6878/ace/manifest.m3u8?id=...
+      https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?id=...
     """
     try:
         p = urlparse(url)
@@ -117,13 +104,13 @@ def rewrite_acestream_url(url: str, engine_ip: str, engine_port: int) -> str:
         if not infohash:
             return url
 
-        return f"http://{engine_ip}:{engine_port}/ace/manifest.m3u8?id={infohash}"
+        return f"{ENGINE_BASE_URL}/ace/manifest.m3u8?id={infohash}"
     except Exception:
         # If anything looks odd, keep original URL
         return url
 
 
-def transform_playlist(content: str, group_name: str, engine_ip: str, engine_port: int) -> List[str]:
+def transform_playlist(content: str, group_name: str) -> List[str]:
     """
     Transform upstream playlist format into IPTV-friendly format and
     rewrite Ace Stream engine URLs to manifest.m3u8.
@@ -136,7 +123,7 @@ def transform_playlist(content: str, group_name: str, engine_ip: str, engine_por
     Output:
         #EXTINF:0,Channel Name
         #EXTGRP:<Russian Group Name>
-        http://stream-url (rewritten if Ace getstream)
+        https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?id=... (rewritten if Ace getstream)
     """
     lines = content.splitlines()
     out: List[str] = []
@@ -162,7 +149,7 @@ def transform_playlist(content: str, group_name: str, engine_ip: str, engine_por
             if i + 1 < len(lines):
                 url = lines[i + 1].strip()
                 if url and not url.startswith("#"):
-                    url = rewrite_acestream_url(url, engine_ip, engine_port)
+                    url = rewrite_acestream_url(url)
                     out.append(url)
                     i += 1
 
@@ -178,16 +165,12 @@ def transform_playlist(content: str, group_name: str, engine_ip: str, engine_por
 async def fetch_category(
     client: httpx.AsyncClient,
     category: str,
-    engine_ip: str,
-    engine_port: int,
 ) -> str:
     """
     Fetch a single category playlist from upstream.
     """
     params = {
         "category": category,
-        "engine_ip": engine_ip,
-        "engine_port": str(engine_port),
     }
 
     response = await client.get(UPSTREAM_BASE, params=params, follow_redirects=True)
@@ -195,7 +178,7 @@ async def fetch_category(
     return response.text
 
 
-async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
+async def build_playlist() -> bytes:
     """
     Build combined playlist by:
         1. Fetching all categories concurrently
@@ -203,7 +186,7 @@ async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
         3. Concatenating into a single M3U file
         4. Caching result
     """
-    cache_key = (engine_ip, engine_port)
+    cache_key = "default"
     now = time.time()
 
     # Serve from cache if valid
@@ -218,7 +201,7 @@ async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
 
         # Fetch all categories concurrently
         tasks = [
-            fetch_category(client, category, engine_ip, engine_port)
+            fetch_category(client, category)
             for category, _ in pairs
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -231,7 +214,7 @@ async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
             # Skip failed category without failing entire playlist
             continue
 
-        combined.extend(transform_playlist(result, group_name, engine_ip, engine_port))
+        combined.extend(transform_playlist(result, group_name))
 
     # Use CRLF for maximum IPTV compatibility
     final = "\r\n".join(combined) + "\r\n"
@@ -248,18 +231,12 @@ async def build_playlist(engine_ip: str, engine_port: int) -> bytes:
 # ---------------------------------------------------------------------------
 
 @app.api_route("/playlist", methods=["GET", "HEAD"])
-async def playlist(
-    request: Request,
-    engine_ip: str = Query(DEFAULT_ENGINE_IP),
-    engine_port: int = Query(DEFAULT_ENGINE_PORT, ge=1, le=65535),
-):
+async def playlist(request: Request):
     """
     Main endpoint.
     Returns combined M3U playlist.
     """
-    engine_ip = validate_engine_ip(engine_ip)
-
-    payload = await build_playlist(engine_ip, engine_port)
+    payload = await build_playlist()
     body = b"" if request.method == "HEAD" else payload
 
     return Response(
@@ -270,18 +247,28 @@ async def playlist(
 
 
 @app.api_route("/playlist/", methods=["GET", "HEAD"])
-async def playlist_slash(
-    request: Request,
-    engine_ip: str = Query(DEFAULT_ENGINE_IP),
-    engine_port: int = Query(DEFAULT_ENGINE_PORT, ge=1, le=65535),
-):
+async def playlist_slash(request: Request):
     """
     Same as /playlist but without redirect for trailing slash.
     Some IPTV clients break on redirects.
     """
-    engine_ip = validate_engine_ip(engine_ip)
+    payload = await build_playlist()
+    body = b"" if request.method == "HEAD" else payload
 
-    payload = await build_playlist(engine_ip, engine_port)
+    return Response(
+        content=body,
+        media_type="application/octet-stream",
+        headers=response_headers(),
+    )
+
+
+@app.api_route("/playlist.m3u8", methods=["GET", "HEAD"])
+async def playlist_m3u8(request: Request):
+    """
+    Standard IPTV M3U playlist extension.
+    Some players require .m3u8 extension.
+    """
+    payload = await build_playlist()
     body = b"" if request.method == "HEAD" else payload
 
     return Response(

@@ -10,27 +10,12 @@ docker run --rm -p 8000:8000 ghcr.io/kalpak44/acestream-proxy:latest
 
 ## Get playlist
 
-Defaults:
-
-* `engine_ip=192.168.1.50`
-* `engine_port=6878`
-
 ```bash
-curl "http://localhost:8000/playlist"
-```
-
-Override engine IP/port (validated):
-
-```bash
-curl "http://localhost:8000/playlist?engine_ip=192.168.0.244&engine_port=6878"
+curl "http://localhost:8000/playlist.m3u8"
 ```
 
 Use deployments: 
 
 ```bash
-curl https://acestream-proxy.pavel-usanli.online/playlist
-```
-
-```bash
-curl "https://acestream-proxy.pavel-usanli.online/playlist?engine_ip=192.168.0.244&engine_port=6878"
+curl https://iptv.pavel-usanli.online/playlist.m3u8
 ```
