@@ -80,14 +80,14 @@ def response_headers() -> dict:
 
 def rewrite_acestream_url(url: str) -> str:
     """
-    Rewrite Ace Stream engine URL from getstream to manifest.m3u8.
+    Rewrite Ace Stream engine URL from getstream to its original path.
     All original query parameters are preserved and appended to the new URL.
 
     Input (example):
       http://127.0.0.1:6878/ace/getstream?infohash=...&pid=1
 
     Output:
-      https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?infohash=...&pid=1
+      https://streaming-television.pavel-usanli.online/ace/getstream?infohash=...&pid=1
     """
     try:
         p = urlparse(url)
@@ -120,7 +120,7 @@ def rewrite_acestream_url(url: str) -> str:
         
         new_url_parts[0] = engine_p.scheme  # scheme
         new_url_parts[1] = engine_p.netloc  # netloc
-        new_url_parts[2] = "/ace/manifest.m3u8" # path
+        new_url_parts[2] = p.path # path (keep original)
         new_url_parts[4] = new_query # query
         
         return urlunparse(new_url_parts)
@@ -132,7 +132,7 @@ def rewrite_acestream_url(url: str) -> str:
 def transform_playlist(content: str, group_name: str) -> List[str]:
     """
     Transform upstream playlist format into IPTV-friendly format and
-    rewrite Ace Stream engine URLs to manifest.m3u8.
+    rewrite Ace Stream engine URLs.
 
     Upstream example:
         #EXTM3U
@@ -142,7 +142,7 @@ def transform_playlist(content: str, group_name: str) -> List[str]:
     Output:
         #EXTINF:0,Channel Name
         #EXTGRP:<Russian Group Name>
-        https://streaming-television.pavel-usanli.online/ace/manifest.m3u8?infohash=... (rewritten if Ace getstream)
+        https://streaming-television.pavel-usanli.online/ace/getstream?infohash=... (rewritten if Ace getstream)
     """
     lines = content.splitlines()
     out: List[str] = []
