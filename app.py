@@ -265,41 +265,6 @@ async def build_playlist(extra_params: dict = None) -> bytes:
 # API Endpoints
 # ---------------------------------------------------------------------------
 
-@app.api_route("/playlist", methods=["GET", "HEAD"])
-async def playlist(request: Request):
-    """
-    Main endpoint. Returns combined M3U playlist.
-    All incoming query parameters are forwarded to the upstream service
-    and factored into the cache key.
-    """
-    extra_params = dict(request.query_params)
-    payload = await build_playlist(extra_params)
-    body = b"" if request.method == "HEAD" else payload
-
-    return Response(
-        content=body,
-        media_type="application/octet-stream",
-        headers=response_headers(),
-    )
-
-
-@app.api_route("/playlist/", methods=["GET", "HEAD"])
-async def playlist_slash(request: Request):
-    """
-    Alternative endpoint for trailing slash. Returns combined M3U playlist.
-    All incoming query parameters are forwarded to the upstream service.
-    """
-    extra_params = dict(request.query_params)
-    payload = await build_playlist(extra_params)
-    body = b"" if request.method == "HEAD" else payload
-
-    return Response(
-        content=body,
-        media_type="application/octet-stream",
-        headers=response_headers(),
-    )
-
-
 @app.api_route("/playlist.m3u8", methods=["GET", "HEAD"])
 async def playlist_m3u8(request: Request):
     """
