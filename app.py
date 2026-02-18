@@ -1,6 +1,7 @@
 # app.py
 import asyncio
 import json
+import logging
 import os
 import time
 from typing import List, Optional
@@ -8,6 +9,15 @@ from typing import List, Optional
 import httpx
 from fastapi import FastAPI, Response, Request
 from fastapi.responses import FileResponse
+
+# ---------------------------------------------------------------------------
+# Logging Configuration
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("acestream-proxy")
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -46,10 +56,19 @@ async def fetch_all_results() -> List[dict]:
 
     async with httpx.AsyncClient() as client:
         while True:
-            resp = await client.get(
-                SEARCH_URL, params={"page": page, "page_size": PAGE_SIZE}, timeout=15.0
-            )
-            resp.raise_for_status()
+            logger.info(f"Fetching search results, page {page}...")
+            try:
+                resp = await client.get(
+                    SEARCH_URL, params={"page": page, "page_size": PAGE_SIZE}, timeout=15.0
+                )
+                resp.raise_for_status()
+            except httpx.RequestError as exc:
+                logger.error(f"An error occurred while requesting {exc.request.url!r}: {exc}")
+                raise
+            except httpx.HTTPStatusError as exc:
+                logger.error(f"Error response {exc.response.status_code} while requesting {exc.request.url!r}")
+                raise
+
             data = resp.json()
 
             result = data.get("result", {})
@@ -57,9 +76,11 @@ async def fetch_all_results() -> List[dict]:
             total = int(result.get("total", 0) or 0)
 
             if not results:
+                logger.info("No more results found.")
                 break
 
             all_results.extend(results)
+            logger.info(f"Collected {len(all_results)} / {total} items.")
 
             if len(all_results) >= total:
                 break
@@ -127,20 +148,27 @@ async def write_playlist_if_stale() -> Optional[int]:
     """Create or refresh playlist file if older than TTL. Returns item count or None."""
     need_update = False
     if not os.path.exists(PLAYLIST_FILE):
+        logger.info(f"Playlist file {PLAYLIST_FILE} does not exist. Initializing...")
         need_update = True
     else:
         age = time.time() - os.path.getmtime(PLAYLIST_FILE)
         if age > CACHE_TTL:
+            logger.info(f"Playlist file {PLAYLIST_FILE} is stale (age: {age:.0f}s, TTL: {CACHE_TTL}s). Refreshing...")
             need_update = True
 
     if not need_update:
         return None
 
-    results = await fetch_all_results()
-    content = generate_m3u8(results)
-    with open(PLAYLIST_FILE, "w", encoding="utf-8") as f:
-        f.write(content)
-    return len(results)
+    try:
+        results = await fetch_all_results()
+        content = generate_m3u8(results)
+        with open(PLAYLIST_FILE, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info(f"Playlist updated successfully with {len(results)} items.")
+        return len(results)
+    except Exception as e:
+        logger.error(f"Failed to update playlist: {e}")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +177,24 @@ async def write_playlist_if_stale() -> Optional[int]:
 
 @app.on_event("startup")
 async def on_startup():
-    # Refresh in background at startup
-    asyncio.create_task(write_playlist_if_stale())
+    # Build playlist at startup before accepting requests
+    logger.info("Service starting up. Initializing playlist...")
+    max_retries = 10
+    retry_delay = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            count = await write_playlist_if_stale()
+            if count is not None or os.path.exists(PLAYLIST_FILE):
+                logger.info("Startup playlist initialization complete.")
+                break
+        except Exception as e:
+            logger.warning(f"Startup playlist initialization attempt {attempt} failed: {e}")
+        
+        if attempt < max_retries:
+            logger.info(f"Retrying in {retry_delay} seconds...")
+            await asyncio.sleep(retry_delay)
+    else:
+        logger.error("Failed to initialize playlist after several attempts during startup.")
 
 
 @app.api_route("/playlist.m3u8", methods=["GET", "HEAD"])
