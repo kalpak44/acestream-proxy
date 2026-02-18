@@ -136,6 +136,7 @@ def generate_m3u8(results: List[dict]) -> str:
                 f'#EXTINF:-1 tvg-name="{name}"{tvg_id_attr} tvg-logo="{logo}" '
                 f'group-title="{group}",{display_name}'
             )
+            lines.append(f"#EXTGRP:{group}")
             lines.append(extinf)
 
             stream_url = f"{STREAM_BASE_URL}?infohash={infohash}"
