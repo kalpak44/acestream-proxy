@@ -1,6 +1,6 @@
 # Ace Stream Proxy
 
-A tiny FastAPI service that queries an Ace Stream search endpoint, converts the results into an IPTV‑friendly M3U8 playlist, and serves it over HTTP. It enriches entries with EPG titles (when available), channel logos, and group information. As of the latest update, each channel also includes an `#EXTGRP:` line for improved compatibility with IPTV players that rely on this tag.
+A tiny Node.js service that queries an Ace Stream search endpoint, converts the results into an IPTV‑friendly M3U8 playlist, and serves it over HTTP. It enriches entries with EPG titles (when available), channel logos, and group information. As of the latest update, each channel also includes an `#EXTGRP:` line for improved compatibility with IPTV players that rely on this tag.
 
 ## Features
 - Generates an M3U8 playlist from Ace Stream search results
@@ -48,15 +48,13 @@ Then open:
 ## Run locally (without Docker)
 
 Requirements:
-- Python 3.12+
+- Node.js 20+
 
 Install and run:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000
+npm install
+npm start
 ```
 
 ## Configuration
@@ -108,6 +106,9 @@ The service logs to stdout with level `INFO` by default and reports pagination p
   - Ensure your player supports `#EXTGRP`. This service also keeps `group-title` in `#EXTINF` for broader compatibility.
 
 ## Development
-- Main service: `app.py`
-- Dependencies: see `requirements.txt`
+- Main entry point: `src/index.js`
+- Application logic: `src/app.js`
+- Services: `src/services/`
+- Configuration: `src/config.js`
+- Dependencies: see `package.json`
 - Containerization: `Dockerfile`

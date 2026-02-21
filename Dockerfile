@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM node:20-slim
 
 LABEL maintainer="Pavel Usanli <pavel.usanli@gmail.com>"
 LABEL description="Ace Stream Proxy - transforms and rewrites Ace Stream M3U playlists"
@@ -6,11 +6,11 @@ LABEL org.opencontainers.image.source="https://github.com/pavel-usanli/acestream
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY package*.json ./
+RUN npm install --production
 
-COPY app.py .
+COPY src ./src
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["npm", "start"]
