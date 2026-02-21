@@ -32,6 +32,55 @@ STREAM_BASE_URL = os.getenv(
 PAGE_SIZE = int(os.getenv("ACESTREAM_PAGE_SIZE", "10"))  # per prompt
 PLAYLIST_FILE = os.getenv("PLAYLIST_FILE", "playlist.m3u8")
 CACHE_TTL = int(os.getenv("PLAYLIST_TTL", "3600"))  # seconds
+COUNTRY_MAP = {
+    "ru": "Россия",
+    "ua": "Украина",
+    "by": "Беларусь",
+    "kz": "Казахстан",
+    "us": "США",
+    "gb": "Великобритания",
+    "de": "Германия",
+    "fr": "Франция",
+    "it": "Италия",
+    "es": "Испания",
+    "tr": "Турция",
+    "pl": "Польша",
+    "nl": "Нидерланды",
+    "be": "Бельгия",
+    "ca": "Канада",
+    "au": "Австралия",
+    "il": "Израиль",
+    "pt": "Португалия",
+    "gr": "Греция",
+    "cz": "Чехия",
+    "hu": "Венгрия",
+    "ro": "Румыния",
+    "bg": "Болгария",
+    "at": "Австрия",
+    "ch": "Швейцария",
+    "se": "Швеция",
+    "no": "Норвегия",
+    "fi": "Финляндия",
+    "dk": "Дания",
+    "ie": "Ирландия",
+    "br": "Бразилия",
+    "ar": "Аргентина",
+    "cl": "Чили",
+    "co": "Колумбия",
+    "mx": "Мексика",
+    "cn": "Китай",
+    "jp": "Япония",
+    "kr": "Южная Корея",
+    "in": "Индия",
+    "sa": "Саудовская Аравия",
+    "ae": "ОАЭ",
+    "eg": "Египет",
+    "za": "ЮАР",
+}
+CATEGORY_MAP = {
+    "music": "Музыка",
+    "movies": "Кино",
+}
 
 # Disable automatic trailing-slash redirects (some IPTV clients dislike 307/308)
 app = FastAPI(redirect_slashes=False)
@@ -100,7 +149,7 @@ def pick_logo(urls: List[dict]) -> str:
 
 
 def generate_m3u8(results: List[dict]) -> str:
-    """Generate M3U8 with EPG title (if present), logo and category."""
+    """Generate M3U8 grouped by country (Russian name)."""
     lines: List[str] = ["#EXTM3U"]
 
     for res in results:
@@ -123,8 +172,24 @@ def generate_m3u8(results: List[dict]) -> str:
             if not infohash:
                 continue
 
-            categories = item.get("categories") or []
-            group = categories[0] if categories else "General"
+            countries = item.get("countries") or []
+            item_categories = item.get("categories") or []
+            
+            groups = []
+            # Group by country. If multiple countries, add to multiple groups.
+            for c in countries:
+                c_lower = c.lower()
+                groups.append(COUNTRY_MAP.get(c_lower, c_lower.upper()))
+
+            # Add special category groups
+            for cat in item_categories:
+                cat_lower = cat.lower()
+                if cat_lower in CATEGORY_MAP:
+                    groups.append(CATEGORY_MAP[cat_lower])
+
+            # If no countries and no special categories, fall back to "Прочее"
+            if not groups:
+                groups = ["Прочее"]
 
             channel_id = item.get("channel_id") or res.get("channel_id")
             tvg_id_attr = f' tvg-id="{channel_id}"' if channel_id is not None else ""
@@ -132,15 +197,16 @@ def generate_m3u8(results: List[dict]) -> str:
             # Compose display name with EPG title when present
             display_name = name if not epg_title else f"{name} — {epg_title}"
 
-            extinf = (
-                f'#EXTINF:-1 tvg-name="{name}"{tvg_id_attr} tvg-logo="{logo}" '
-                f'group-title="{group}",{display_name}'
-            )
-            lines.append(f"#EXTGRP:{group}")
-            lines.append(extinf)
+            for group in groups:
+                extinf = (
+                    f'#EXTINF:-1 tvg-name="{name}"{tvg_id_attr} tvg-logo="{logo}" '
+                    f'group-title="{group}",{display_name}'
+                )
+                lines.append(f"#EXTGRP:{group}")
+                lines.append(extinf)
 
-            stream_url = f"{STREAM_BASE_URL}?infohash={infohash}"
-            lines.append(stream_url)
+                stream_url = f"{STREAM_BASE_URL}?infohash={infohash}"
+                lines.append(stream_url)
 
     return "\n".join(lines) + "\n"
 
