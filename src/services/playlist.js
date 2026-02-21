@@ -11,7 +11,7 @@ const {
   EXTERNAL_PLAYLISTS,
 } = require('../config');
 
-async function fetchExternalPlaylist(url, group) {
+async function fetchExternalPlaylist(url, label) {
   try {
     logger.info(`Fetching external playlist: ${url}...`);
     const response = await axios.get(url, { timeout: 15000 });
@@ -28,18 +28,26 @@ async function fetchExternalPlaylist(url, group) {
       }
 
       if (trimmed.startsWith('#EXTINF:')) {
-        // Replace or add group-title
         let updatedExtinf = trimmed;
+        let group = label;
+
         if (updatedExtinf.includes('group-title="')) {
-          updatedExtinf = updatedExtinf.replace(/group-title="[^"]*"/, `group-title="${group}"`);
+          const match = updatedExtinf.match(/group-title="([^"]*)"/);
+          if (match && match[1]) {
+            const originalGroup = match[1];
+            group = `${originalGroup} / ${label}`;
+            updatedExtinf = updatedExtinf.replace(/group-title="[^"]*"/, `group-title="${group}"`);
+          } else {
+            updatedExtinf = updatedExtinf.replace(/group-title="[^"]*"/, `group-title="${label}"`);
+          }
         } else {
-          updatedExtinf = updatedExtinf.replace(/,/, ` group-title="${group}",`);
+          updatedExtinf = updatedExtinf.replace(/,/, ` group-title="${label}",`);
         }
-        currentExtinf = updatedExtinf;
+        currentExtinf = { line: updatedExtinf, group };
       } else if (!trimmed.startsWith('#')) {
         if (currentExtinf) {
-          resultLines.push(`#EXTGRP:${group}`);
-          resultLines.push(currentExtinf);
+          resultLines.push(`#EXTGRP:${currentExtinf.group}`);
+          resultLines.push(currentExtinf.line);
           resultLines.push(trimmed);
           currentExtinf = null;
         }
@@ -171,7 +179,7 @@ async function writePlaylistIfStale(force = false) {
     let content = generateM3u8(results);
 
     for (const ext of EXTERNAL_PLAYLISTS) {
-      const extContent = await fetchExternalPlaylist(ext.url, ext.group);
+      const extContent = await fetchExternalPlaylist(ext.url, ext.label);
       if (extContent) {
         content += '\n' + extContent + '\n';
       }
@@ -189,4 +197,5 @@ async function writePlaylistIfStale(force = false) {
 module.exports = {
   writePlaylistIfStale,
   generateM3u8,
+  fetchExternalPlaylist,
 };

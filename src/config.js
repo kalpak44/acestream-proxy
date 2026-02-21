@@ -8,8 +8,8 @@ const PLAYLIST_FILE = process.env.PLAYLIST_FILE || 'playlist.m3u8';
 const CACHE_TTL = parseInt(process.env.PLAYLIST_TTL || '3600', 10); // seconds
 const PORT = process.env.PORT || 8000;
 const EXTERNAL_PLAYLISTS = [
-  { url: 'https://iptv-org.github.io/iptv/languages/bul.m3u', label: 'Bulgarian-github', group: 'Болгария' },
-  { url: 'https://iptv-org.github.io/iptv/languages/ces.m3u', label: 'Czech-github', group: 'Чехия' },
+  { url: 'https://iptv-org.github.io/iptv/languages/bul.m3u', label: 'github', group: 'Болгария' },
+  { url: 'https://iptv-org.github.io/iptv/languages/ces.m3u', label: 'github', group: 'Чехия' },
   { url: 'https://iptv-org.github.io/iptv/index.m3u', label: 'github', group: 'github' },
 ];
 
