@@ -1,4 +1,5 @@
 const fs = require('fs-extra');
+const axios = require('axios');
 const logger = require('../logger');
 const { fetchAllResults } = require('./acestream');
 const {
@@ -7,7 +8,49 @@ const {
   CATEGORY_MAP,
   PLAYLIST_FILE,
   CACHE_TTL,
+  EXTERNAL_PLAYLISTS,
 } = require('../config');
+
+async function fetchExternalPlaylist(url, group) {
+  try {
+    logger.info(`Fetching external playlist: ${url}...`);
+    const response = await axios.get(url, { timeout: 15000 });
+    const content = response.data;
+    const lines = content.split(/\r?\n/);
+    const resultLines = [];
+    
+    let currentExtinf = null;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#EXTM3U')) {
+        continue;
+      }
+
+      if (trimmed.startsWith('#EXTINF:')) {
+        // Replace or add group-title
+        let updatedExtinf = trimmed;
+        if (updatedExtinf.includes('group-title="')) {
+          updatedExtinf = updatedExtinf.replace(/group-title="[^"]*"/, `group-title="${group}"`);
+        } else {
+          updatedExtinf = updatedExtinf.replace(/,/, ` group-title="${group}",`);
+        }
+        currentExtinf = updatedExtinf;
+      } else if (!trimmed.startsWith('#')) {
+        if (currentExtinf) {
+          resultLines.push(`#EXTGRP:${group}`);
+          resultLines.push(currentExtinf);
+          resultLines.push(trimmed);
+          currentExtinf = null;
+        }
+      }
+    }
+    return resultLines.join('\n');
+  } catch (error) {
+    logger.error(`Failed to fetch external playlist ${url}: ${error.message}`);
+    return '';
+  }
+}
 
 function pickLogo(urls) {
   if (!urls || urls.length === 0) {
@@ -23,6 +66,8 @@ function pickLogo(urls) {
 
 function generateM3u8(results) {
   const lines = ['#EXTM3U'];
+  const uniqueCountries = new Set();
+  const uniqueCategories = new Set();
 
   for (const res of results) {
     const name = res.name || 'Unknown';
@@ -50,16 +95,18 @@ function generateM3u8(results) {
       const itemCategories = item.categories || [];
 
       const groups = [];
-      for (const c of countries) {
-        const cLower = c.toLowerCase();
-        groups.push(COUNTRY_MAP[cLower] || cLower.toUpperCase());
-      }
-
       for (const cat of itemCategories) {
         const catLower = cat.toLowerCase();
+        uniqueCategories.add(catLower);
         if (CATEGORY_MAP[catLower]) {
           groups.push(CATEGORY_MAP[catLower]);
         }
+      }
+
+      for (const c of countries) {
+        const cLower = c.toLowerCase();
+        uniqueCountries.add(cLower);
+        groups.push(COUNTRY_MAP[cLower] || cLower.toUpperCase());
       }
 
       if (groups.length === 0) {
@@ -80,6 +127,13 @@ function generateM3u8(results) {
         lines.push(streamUrl);
       }
     }
+  }
+
+  if (uniqueCountries.size > 0) {
+    logger.info(`Unique countries: ${Array.from(uniqueCountries).sort().join(', ')}`);
+  }
+  if (uniqueCategories.size > 0) {
+    logger.info(`Unique categories: ${Array.from(uniqueCategories).sort().join(', ')}`);
   }
 
   return lines.join('\n') + '\n';
@@ -114,9 +168,17 @@ async function writePlaylistIfStale(force = false) {
 
   try {
     const results = await fetchAllResults();
-    const content = generateM3u8(results);
+    let content = generateM3u8(results);
+
+    for (const ext of EXTERNAL_PLAYLISTS) {
+      const extContent = await fetchExternalPlaylist(ext.url, ext.group);
+      if (extContent) {
+        content += '\n' + extContent + '\n';
+      }
+    }
+
     await fs.writeFile(PLAYLIST_FILE, content, 'utf8');
-    logger.info(`Playlist updated successfully with ${results.length} items.`);
+    logger.info(`Playlist updated successfully with ${results.length} items from AceStream and external playlists.`);
     return results.length;
   } catch (error) {
     logger.error(`Failed to update playlist: ${error.message}`);
@@ -126,4 +188,5 @@ async function writePlaylistIfStale(force = false) {
 
 module.exports = {
   writePlaylistIfStale,
+  generateM3u8,
 };
