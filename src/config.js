@@ -7,128 +7,95 @@ const PAGE_SIZE = parseInt(process.env.ACESTREAM_PAGE_SIZE || '10', 10);
 const PLAYLIST_FILE = process.env.PLAYLIST_FILE || 'playlist.m3u8';
 const CACHE_TTL = parseInt(process.env.PLAYLIST_TTL || '3600', 10); // seconds
 const PORT = process.env.PORT || 8000;
-const EXTERNAL_PLAYLISTS = [
-  { url: 'https://iptv-org.github.io/iptv/languages/bul.m3u', label: 'github', group: 'Болгария' },
-  { url: 'https://iptv-org.github.io/iptv/languages/ces.m3u', label: 'github', group: 'Чехия' },
-  { url: 'https://iptv-org.github.io/iptv/index.m3u', label: 'github', group: 'github' },
+const COUNTRY_MAP = [
+    {
+        code: 'bg',
+        name: 'Болгария',
+        external: ['https://iptv-org.github.io/iptv/languages/bul.m3u']
+    },
+    {code: 'by', name: 'Беларусь'},
+    {code: 'ca', name: 'Канада'},
+    {
+        code: 'cz',
+        name: 'Чехия',
+        external: ['https://iptv-org.github.io/iptv/languages/ces.m3u']
+    },
+    {code: 'ee', name: 'Эстония'},
+    {
+        code: 'fr',
+        name: 'Франция',
+        external: ['https://iptv-org.github.io/iptv/countries/fr.m3u']
+    },
+    {
+        code: 'gb',
+        name: 'Великобритания',
+        external: ['https://iptv-org.github.io/iptv/languages/eng.m3u']
+    },
+    {code: 'kz', name: 'Казахстан'},
+    {code: 'lt', name: 'Литва'},
+    {code: 'lv', name: 'Латвия'},
+    {
+        code: 'md',
+        name: 'Молдова',
+        external: ['https://iptv-org.github.io/iptv/countries/md.m3u']
+    },
+    {code: 'mk', name: 'Северная Македония'},
+    {
+        code: 'pl',
+        name: 'Польша',
+        external: ['https://iptv-org.github.io/iptv/languages/pol.m3u']
+    },
+    {code: 'ro', name: 'Румыния'},
+    {code: 'ru', name: 'Россия'},
+    {
+        code: 'ua',
+        name: 'Украина',
+        external: ['https://iptv-org.github.io/iptv/countries/ua.m3u']
+    },
+    {code: 'us', name: 'США'},
 ];
 
-const COUNTRY_MAP = {
-  'ae': 'ОАЭ',
-  'al': 'Албания',
-  'am': 'Армения',
-  'ar': 'Аргентина',
-  'at': 'Австрия',
-  'au': 'Австралия',
-  'be': 'Бельгия',
-  'bg': 'Болгария',
-  'bo': 'Боливия',
-  'br': 'Бразилия',
-  'by': 'Беларусь',
-  'ca': 'Канада',
-  'cd': 'ДР Конго',
-  'ch': 'Швейцария',
-  'cl': 'Чили',
-  'cm': 'Камерун',
-  'cn': 'Китай',
-  'co': 'Колумбия',
-  'cy': 'Кипр',
-  'cz': 'Чехия',
-  'de': 'Германия',
-  'dk': 'Дания',
-  'ee': 'Эстония',
-  'eg': 'Египет',
-  'es': 'Испания',
-  'et': 'Эфиопия',
-  'fi': 'Финляндия',
-  'fr': 'Франция',
-  'gb': 'Великобритания',
-  'ge': 'Грузия',
-  'gp': 'Гваделупа',
-  'gq': 'Экваториальная Гвинея',
-  'gr': 'Греция',
-  'hu': 'Венгрия',
-  'id': 'Индонезия',
-  'ie': 'Ирландия',
-  'il': 'Израиль',
-  'in': 'Индия',
-  'int': 'Международные',
-  'iq': 'Ирак',
-  'ir': 'Иран',
-  'it': 'Италия',
-  'jo': 'Иордания',
-  'jp': 'Япония',
-  'kg': 'Киргизия',
-  'kr': 'Южная Корея',
-  'kz': 'Казахстан',
-  'lb': 'Ливан',
-  'lt': 'Литва',
-  'lv': 'Латвия',
-  'md': 'Молдавия',
-  'mk': 'Северная Македония',
-  'mx': 'Мексика',
-  'nl': 'Нидерланды',
-  'no': 'Норвегия',
-  'nz': 'Новая Зеландия',
-  'om': 'Оман',
-  'pl': 'Польша',
-  'ps': 'Палестина',
-  'pt': 'Португалия',
-  'qa': 'Катар',
-  'ro': 'Румыния',
-  'rs': 'Сербия',
-  'ru': 'Россия',
-  'sa': 'Саудовская Аравия',
-  'se': 'Швеция',
-  'sg': 'Сингапур',
-  'si': 'Словения',
-  'sk': 'Словакия',
-  'sy': 'Сирия',
-  'th': 'Таиланд',
-  'tj': 'Таджикистан',
-  'tm': 'Туркмения',
-  'tr': 'Турция',
-  'tw': 'Тайвань',
-  'tz': 'Танзания',
-  'ua': 'Украина',
-  'us': 'США',
-  'uz': 'Узбекистан',
-  'vn': 'Вьетнам',
-  'za': 'ЮАР',
+const CATEGORY_REMAP = [
+    {
+        sources: ['music', 'music_video'],
+        name: 'Музыка',
+        external: ['https://iptv-org.github.io/iptv/categories/music.m3u']
+    },
+    {
+        sources: ['educational', 'documentaries'],
+        name: 'Познавательные',
+        external: ['https://iptv-org.github.io/iptv/categories/documentary.m3u', 'https://iptv-org.github.io/iptv/categories/education.m3u']
+    },
+    {sources: ['entertaining'], name: 'Развлекательные', external: []},
+    {sources: ['kids'], name: 'Детские', external: ['https://iptv-org.github.io/iptv/categories/kids.m3u']},
+    {sources: ['movies'], name: 'Кино', external: []},
+    {
+        sources: ['other', 'amateur', 'emilia', 'informational', 'fashion', 'kameros', 'regional', 'teleshop', 'tv', 'vari', 'emilia romagna'],
+        name: 'Прочее',
+        external: []
+    },
+    {sources: ['radijas'], name: 'Радио', external: []},
+    {sources: ['religion', 'regional'], name: 'Региональные', external: []},
+    {sources: ['sport'], name: 'Спорт', external: ['https://iptv-org.github.io/iptv/categories/sports.m3u']},
+];
+
+const INFOHASH_CATEGORY_OVERRIDE = {
+    // 'Музыка': ['infohash1', 'infohash2']
 };
 
-const CATEGORY_MAP = {
-  'amateur': 'Любительское',
-  'argentina': 'Аргентина',
-  'documentaries': 'Документальные',
-  'educational': 'Познавательные',
-  'emilia romagna': 'Эмилия-Романья',
-  'entertaining': 'Развлекательные',
-  'fashion': 'Мода',
-  'informational': 'Информационные',
-  'kameros': 'Камеры',
-  'kids': 'Детские',
-  'movies': 'Кино',
-  'music': 'Музыка',
-  'music_video': 'Музыкальные клипы',
-  'other': 'Прочее',
-  'radijas': 'Радио',
-  'regional': 'Региональные',
-  'religion': 'Религия',
-  'sport': 'Спорт',
-  'teleshop': 'Телемагазин',
-  'tv': 'ТВ',
-  'vari': 'Разное',
+const INFOHASH_COUNTRY_OVERRIDE = {
+    // 'Россия': ['infohash3', 'infohash4']
 };
 
 module.exports = {
-  SEARCH_URL,
-  STREAM_BASE_URL,
-  PAGE_SIZE,
-  PLAYLIST_FILE,
-  CACHE_TTL,
-  PORT,
-  COUNTRY_MAP,
-  CATEGORY_MAP,
-  EXTERNAL_PLAYLISTS,
+    SEARCH_URL,
+    STREAM_BASE_URL,
+    PAGE_SIZE,
+    PLAYLIST_FILE,
+    CACHE_TTL,
+    PORT,
+    COUNTRY_MAP,
+    CATEGORY_REMAP,
+    INFOHASH_CATEGORY_OVERRIDE,
+    INFOHASH_COUNTRY_OVERRIDE,
 };

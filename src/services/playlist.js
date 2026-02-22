@@ -2,14 +2,7 @@ const fs = require('fs-extra');
 const axios = require('axios');
 const logger = require('../logger');
 const { fetchAllResults } = require('./acestream');
-const {
-  STREAM_BASE_URL,
-  COUNTRY_MAP,
-  CATEGORY_MAP,
-  PLAYLIST_FILE,
-  CACHE_TTL,
-  EXTERNAL_PLAYLISTS,
-} = require('../config');
+const config = require('../config');
 
 async function fetchExternalPlaylist(url, label) {
   try {
@@ -102,23 +95,61 @@ function generateM3u8(results) {
       const countries = item.countries || [];
       const itemCategories = item.categories || [];
 
-      const groups = [];
-      for (const cat of itemCategories) {
+      // Filter by configuration
+      const isCountryInMap = countries.some((c) => {
+        const cLower = c.toLowerCase();
+        return config.COUNTRY_MAP.some(cm => cm.code === cLower);
+      });
+      const isCategoryInMap = itemCategories.some((cat) => {
         const catLower = cat.toLowerCase();
-        uniqueCategories.add(catLower);
-        if (CATEGORY_MAP[catLower]) {
-          groups.push(CATEGORY_MAP[catLower]);
+        // Check if catLower is in any of the remapped categories
+        return config.CATEGORY_REMAP.some(remap => remap.sources.includes(catLower));
+      });
+
+      if (!isCountryInMap && !isCategoryInMap) {
+        continue;
+      }
+
+      const groups = new Set();
+
+      // Handle INFOHASH_CATEGORY_OVERRIDE
+      for (const [name, infohashes] of Object.entries(config.INFOHASH_CATEGORY_OVERRIDE)) {
+        if (Array.isArray(infohashes) && infohashes.includes(infohash)) {
+          groups.add(name);
         }
       }
 
+      // Handle INFOHASH_COUNTRY_OVERRIDE
+      for (const [name, infohashes] of Object.entries(config.INFOHASH_COUNTRY_OVERRIDE)) {
+        if (Array.isArray(infohashes) && infohashes.includes(infohash)) {
+          groups.add(name);
+        }
+      }
+
+      // Add categories
+      for (const cat of itemCategories) {
+        const catLower = cat.toLowerCase();
+        uniqueCategories.add(catLower);
+        
+        // Remap category if needed
+        const remap = config.CATEGORY_REMAP.find(r => r.sources.includes(catLower));
+        if (remap) {
+          groups.add(remap.name);
+        }
+      }
+
+      // Add countries
       for (const c of countries) {
         const cLower = c.toLowerCase();
         uniqueCountries.add(cLower);
-        groups.push(COUNTRY_MAP[cLower] || cLower.toUpperCase());
+        const countryEntry = config.COUNTRY_MAP.find(cm => cm.code === cLower);
+        if (countryEntry) {
+          groups.add(countryEntry.name);
+        }
       }
 
-      if (groups.length === 0) {
-        groups.push('Прочее');
+      if (groups.size === 0) {
+        groups.add('Прочее');
       }
 
       const channelId = item.channel_id || res.channel_id;
@@ -131,7 +162,7 @@ function generateM3u8(results) {
         lines.push(`#EXTGRP:${group}`);
         lines.push(extinf);
 
-        const streamUrl = `${STREAM_BASE_URL}?infohash=${infohash}`;
+        const streamUrl = `${config.STREAM_BASE_URL}?infohash=${infohash}`;
         lines.push(streamUrl);
       }
     }
@@ -152,15 +183,15 @@ async function writePlaylistIfStale(force = false) {
   
   if (!needUpdate) {
     try {
-      const exists = await fs.pathExists(PLAYLIST_FILE);
+      const exists = await fs.pathExists(config.PLAYLIST_FILE);
       if (!exists) {
-        logger.info(`Playlist file ${PLAYLIST_FILE} does not exist. Initializing...`);
+        logger.info(`Playlist file ${config.PLAYLIST_FILE} does not exist. Initializing...`);
         needUpdate = true;
       } else {
-        const stats = await fs.stat(PLAYLIST_FILE);
+        const stats = await fs.stat(config.PLAYLIST_FILE);
         const age = (Date.now() - stats.mtimeMs) / 1000;
-        if (age > CACHE_TTL) {
-          logger.info(`Playlist file ${PLAYLIST_FILE} is stale (age: ${Math.round(age)}s, TTL: ${CACHE_TTL}s). Refreshing...`);
+        if (age > config.CACHE_TTL) {
+          logger.info(`Playlist file ${config.PLAYLIST_FILE} is stale (age: ${Math.round(age)}s, TTL: ${config.CACHE_TTL}s). Refreshing...`);
           needUpdate = true;
         }
       }
@@ -178,14 +209,29 @@ async function writePlaylistIfStale(force = false) {
     const results = await fetchAllResults();
     let content = generateM3u8(results);
 
-    for (const ext of EXTERNAL_PLAYLISTS) {
-      const extContent = await fetchExternalPlaylist(ext.url, ext.label);
-      if (extContent) {
-        content += '\n' + extContent + '\n';
+    for (const country of config.COUNTRY_MAP) {
+      if (Array.isArray(country.external)) {
+        for (const url of country.external) {
+          const extContent = await fetchExternalPlaylist(url, country.name);
+          if (extContent) {
+            content += '\n' + extContent + '\n';
+          }
+        }
       }
     }
 
-    await fs.writeFile(PLAYLIST_FILE, content, 'utf8');
+    for (const cat of config.CATEGORY_REMAP) {
+      if (Array.isArray(cat.external)) {
+        for (const url of cat.external) {
+          const extContent = await fetchExternalPlaylist(url, cat.name);
+          if (extContent) {
+            content += '\n' + extContent + '\n';
+          }
+        }
+      }
+    }
+
+    await fs.writeFile(config.PLAYLIST_FILE, content, 'utf8');
     logger.info(`Playlist updated successfully with ${results.length} items from AceStream and external playlists.`);
     return results.length;
   } catch (error) {
@@ -197,5 +243,4 @@ async function writePlaylistIfStale(force = false) {
 module.exports = {
   writePlaylistIfStale,
   generateM3u8,
-  fetchExternalPlaylist,
 };
