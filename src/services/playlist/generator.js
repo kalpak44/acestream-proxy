@@ -38,11 +38,14 @@ function generateM3u8(results) {
             const itemCategories = item.categories || [];
 
             const assignedGroups = []; // Change to collect all assigned groups
+            let hasCategoryOverride = false;
+            let hasCountryOverride = false;
 
             // 1. Check INFOHASH_CATEGORY_OVERRIDE
             for (const [gName, infohashes] of Object.entries(config.INFOHASH_CATEGORY_OVERRIDE)) {
                 if (Array.isArray(infohashes) && infohashes.includes(infohash)) {
                     assignedGroups.push({name: gName});
+                    hasCategoryOverride = true;
                 }
             }
 
@@ -54,30 +57,35 @@ function generateM3u8(results) {
                         name: gName,
                         countryCode: countryEntry ? countryEntry.code : null
                     });
+                    hasCountryOverride = true;
                 }
             }
 
             // 3. Check CATEGORY_REMAP
-            for (const cat of itemCategories) {
-                const catLower = cat.toLowerCase();
-                const remap = config.CATEGORY_REMAP.find(r => r.sources.includes(catLower));
-                if (remap) {
-                    if (!assignedGroups.some(g => g.name === remap.name)) {
-                        assignedGroups.push({name: remap.name});
+            if (!hasCategoryOverride) {
+                for (const cat of itemCategories) {
+                    const catLower = cat.toLowerCase();
+                    const remap = config.CATEGORY_REMAP.find(r => r.sources.includes(catLower));
+                    if (remap) {
+                        if (!assignedGroups.some(g => g.name === remap.name)) {
+                            assignedGroups.push({name: remap.name});
+                        }
                     }
                 }
             }
 
             // 4. Check COUNTRY_MAP
-            for (const c of countries) {
-                const cLower = c.toLowerCase();
-                const countryEntry = config.COUNTRY_MAP.find(cm => cm.code === cLower);
-                if (countryEntry) {
-                    if (!assignedGroups.some(g => g.name === countryEntry.name)) {
-                        assignedGroups.push({
-                            name: countryEntry.name,
-                            countryCode: countryEntry.code
-                        });
+            if (!hasCountryOverride) {
+                for (const c of countries) {
+                    const cLower = c.toLowerCase();
+                    const countryEntry = config.COUNTRY_MAP.find(cm => cm.code === cLower);
+                    if (countryEntry) {
+                        if (!assignedGroups.some(g => g.name === countryEntry.name)) {
+                            assignedGroups.push({
+                                name: countryEntry.name,
+                                countryCode: countryEntry.code
+                            });
+                        }
                     }
                 }
             }
