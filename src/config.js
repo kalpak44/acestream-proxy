@@ -38,7 +38,6 @@ const COUNTRY_MAP = [
         name: 'Молдова',
         external: ['https://iptv-org.github.io/iptv/countries/md.m3u']
     },
-    {code: 'mk', name: 'Северная Македония'},
     {
         code: 'pl',
         name: 'Польша',
