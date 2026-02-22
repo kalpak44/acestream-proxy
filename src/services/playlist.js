@@ -66,7 +66,7 @@ function pickLogo(urls) {
 }
 
 function generateM3u8(results) {
-  const lines = ['#EXTM3U'];
+  const groupToItems = {};
   const uniqueCountries = new Set();
   const uniqueCategories = new Set();
 
@@ -158,12 +158,12 @@ function generateM3u8(results) {
       const displayName = !epgTitle ? name : `${name} — ${epgTitle}`;
 
       for (const group of groups) {
+        if (!groupToItems[group]) {
+          groupToItems[group] = [];
+        }
         const extinf = `#EXTINF:-1 tvg-name="${name}"${tvgIdAttr} tvg-logo="${logo}" group-title="${group}",${displayName}`;
-        lines.push(`#EXTGRP:${group}`);
-        lines.push(extinf);
-
         const streamUrl = `${config.STREAM_BASE_URL}?infohash=${infohash}`;
-        lines.push(streamUrl);
+        groupToItems[group].push(`#EXTGRP:${group}\n${extinf}\n${streamUrl}`);
       }
     }
   }
@@ -175,7 +175,7 @@ function generateM3u8(results) {
     logger.info(`Unique categories: ${Array.from(uniqueCategories).sort().join(', ')}`);
   }
 
-  return lines.join('\n') + '\n';
+  return groupToItems;
 }
 
 async function writePlaylistIfStale(force = false) {
@@ -207,30 +207,93 @@ async function writePlaylistIfStale(force = false) {
 
   try {
     const results = await fetchAllResults();
-    let content = generateM3u8(results);
+    const groupToItems = generateM3u8(results);
+    const finalGroups = {};
 
-    for (const country of config.COUNTRY_MAP) {
-      if (Array.isArray(country.external)) {
-        for (const url of country.external) {
-          const extContent = await fetchExternalPlaylist(url, country.name);
-          if (extContent) {
-            content += '\n' + extContent + '\n';
-          }
-        }
-      }
-    }
-
+    // 1. Collect all category content (Internal + External)
     for (const cat of config.CATEGORY_REMAP) {
+      let groupLines = [];
+      
+      // Internal content
+      if (groupToItems[cat.name]) {
+        groupLines.push(...groupToItems[cat.name]);
+        delete groupToItems[cat.name]; // Mark as consumed
+      }
+
+      // External content
       if (Array.isArray(cat.external)) {
         for (const url of cat.external) {
           const extContent = await fetchExternalPlaylist(url, cat.name);
           if (extContent) {
-            content += '\n' + extContent + '\n';
+            groupLines.push(extContent);
           }
         }
       }
+
+      if (groupLines.length > 0) {
+        finalGroups[cat.name] = groupLines.join('\n');
+      }
     }
 
+    // 2. Collect all country content (Internal + External)
+    for (const country of config.COUNTRY_MAP) {
+      let groupLines = [];
+
+      // Internal content
+      if (groupToItems[country.name]) {
+        groupLines.push(...groupToItems[country.name]);
+        delete groupToItems[country.name]; // Mark as consumed
+      }
+
+      // External content
+      if (Array.isArray(country.external)) {
+        for (const url of country.external) {
+          const extContent = await fetchExternalPlaylist(url, country.name);
+          if (extContent) {
+            groupLines.push(extContent);
+          }
+        }
+      }
+
+      if (groupLines.length > 0) {
+        finalGroups[country.name] = groupLines.join('\n');
+      }
+    }
+
+    // 3. Handle any leftovers (e.g., 'Прочее' if it wasn't in remapping or countries)
+    for (const [group, items] of Object.entries(groupToItems)) {
+      if (finalGroups[group]) {
+        finalGroups[group] += '\n' + items.join('\n');
+      } else {
+        finalGroups[group] = items.join('\n');
+      }
+    }
+
+    // Combine everything in final order
+    const lines = ['#EXTM3U'];
+    
+    // 1. Categories in config order
+    for (const cat of config.CATEGORY_REMAP) {
+      if (finalGroups[cat.name]) {
+        lines.push(finalGroups[cat.name]);
+        delete finalGroups[cat.name];
+      }
+    }
+
+    // 2. Countries in config order
+    for (const country of config.COUNTRY_MAP) {
+      if (finalGroups[country.name]) {
+        lines.push(finalGroups[country.name]);
+        delete finalGroups[country.name];
+      }
+    }
+
+    // 3. Anything else
+    for (const content of Object.values(finalGroups)) {
+      lines.push(content);
+    }
+
+    const content = lines.join('\n') + '\n';
     await fs.writeFile(config.PLAYLIST_FILE, content, 'utf8');
     logger.info(`Playlist updated successfully with ${results.length} items from AceStream and external playlists.`);
     return results.length;
