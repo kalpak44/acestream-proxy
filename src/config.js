@@ -70,11 +70,10 @@ const CATEGORY_REMAP = [
     {sources: ['kids'], name: 'Детские', external: ['https://iptv-org.github.io/iptv/categories/kids.m3u']},
     {sources: ['movies'], name: 'Кино', external: []},
     {
-        sources: ['other', 'amateur', 'emilia', 'informational', 'fashion', 'kameros', 'regional', 'teleshop', 'tv', 'vari', 'emilia romagna'],
+        sources: ['other', 'amateur', 'emilia', 'informational', 'fashion', 'kameros', 'regional', 'teleshop', 'tv', 'vari', 'emilia romagna', 'religion', 'regional'],
         name: 'Прочее',
         external: []
     },
-    {sources: ['religion', 'regional'], name: 'Региональные', external: []},
     {sources: ['sport'], name: 'Спорт', external: ['https://iptv-org.github.io/iptv/categories/sports.m3u']},
 ];
 
