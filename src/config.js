@@ -83,6 +83,7 @@ const INFOHASH_CATEGORY_OVERRIDE = {
     'Детские': ['d78c7a1da99696e3987563926a1cd31bff9c56bf',],
     'Музыка': ['7f9ae2b48d0872ae47d04890227d33fb225658d1'],
     'Кино': ['51aba262210dcea336693bfb47e39622615772ee'],
+    'Прочее': ['f004490028139751fc32cd19426459e06b3903fa'],
 };
 
 const INFOHASH_COUNTRY_OVERRIDE = {
