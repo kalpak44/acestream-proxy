@@ -30,7 +30,6 @@ const COUNTRY_MAP = [
         name: 'Великобритания',
         external: ['https://iptv-org.github.io/iptv/languages/eng.m3u']
     },
-    {code: 'kz', name: 'Казахстан'},
     {code: 'lt', name: 'Литва'},
     {code: 'lv', name: 'Латвия'},
     {
