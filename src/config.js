@@ -57,7 +57,7 @@ const COUNTRY_MAP = [
 
 const CATEGORY_REMAP = [
     {
-        sources: ['music', 'music_video'],
+        sources: ['music', 'music_video', 'radijas'],
         name: 'Музыка',
         external: ['https://iptv-org.github.io/iptv/categories/music.m3u']
     },
@@ -74,7 +74,6 @@ const CATEGORY_REMAP = [
         name: 'Прочее',
         external: []
     },
-    {sources: ['radijas'], name: 'Радио', external: []},
     {sources: ['religion', 'regional'], name: 'Региональные', external: []},
     {sources: ['sport'], name: 'Спорт', external: ['https://iptv-org.github.io/iptv/categories/sports.m3u']},
 ];

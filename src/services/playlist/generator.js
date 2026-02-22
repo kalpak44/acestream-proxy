@@ -37,55 +37,52 @@ function generateM3u8(results) {
             const countries = item.countries || [];
             const itemCategories = item.categories || [];
 
-            let assignedGroup = null;
-            let countryCode = null;
+            const assignedGroups = []; // Change to collect all assigned groups
 
             // 1. Check INFOHASH_CATEGORY_OVERRIDE
             for (const [gName, infohashes] of Object.entries(config.INFOHASH_CATEGORY_OVERRIDE)) {
                 if (Array.isArray(infohashes) && infohashes.includes(infohash)) {
-                    assignedGroup = gName;
-                    break;
+                    assignedGroups.push({name: gName});
                 }
             }
 
             // 2. Check INFOHASH_COUNTRY_OVERRIDE
-            if (!assignedGroup) {
-                for (const [gName, infohashes] of Object.entries(config.INFOHASH_COUNTRY_OVERRIDE)) {
-                    if (Array.isArray(infohashes) && infohashes.includes(infohash)) {
-                        assignedGroup = gName;
-                        const countryEntry = config.COUNTRY_MAP.find(cm => cm.name === gName);
-                        if (countryEntry) countryCode = countryEntry.code;
-                        break;
-                    }
+            for (const [gName, infohashes] of Object.entries(config.INFOHASH_COUNTRY_OVERRIDE)) {
+                if (Array.isArray(infohashes) && infohashes.includes(infohash)) {
+                    const countryEntry = config.COUNTRY_MAP.find(cm => cm.name === gName);
+                    assignedGroups.push({
+                        name: gName,
+                        countryCode: countryEntry ? countryEntry.code : null
+                    });
                 }
             }
 
             // 3. Check CATEGORY_REMAP
-            if (!assignedGroup) {
-                for (const cat of itemCategories) {
-                    const catLower = cat.toLowerCase();
-                    const remap = config.CATEGORY_REMAP.find(r => r.sources.includes(catLower));
-                    if (remap) {
-                        assignedGroup = remap.name;
-                        break;
+            for (const cat of itemCategories) {
+                const catLower = cat.toLowerCase();
+                const remap = config.CATEGORY_REMAP.find(r => r.sources.includes(catLower));
+                if (remap) {
+                    if (!assignedGroups.some(g => g.name === remap.name)) {
+                        assignedGroups.push({name: remap.name});
                     }
                 }
             }
 
             // 4. Check COUNTRY_MAP
-            if (!assignedGroup) {
-                for (const c of countries) {
-                    const cLower = c.toLowerCase();
-                    const countryEntry = config.COUNTRY_MAP.find(cm => cm.code === cLower);
-                    if (countryEntry) {
-                        assignedGroup = countryEntry.name;
-                        countryCode = countryEntry.code;
-                        break;
+            for (const c of countries) {
+                const cLower = c.toLowerCase();
+                const countryEntry = config.COUNTRY_MAP.find(cm => cm.code === cLower);
+                if (countryEntry) {
+                    if (!assignedGroups.some(g => g.name === countryEntry.name)) {
+                        assignedGroups.push({
+                            name: countryEntry.name,
+                            countryCode: countryEntry.code
+                        });
                     }
                 }
             }
 
-            if (!assignedGroup) continue;
+            if (assignedGroups.length === 0) continue;
 
             for (const cat of itemCategories) {
                 uniqueCategories.add(cat.toLowerCase());
@@ -94,23 +91,28 @@ function generateM3u8(results) {
                 uniqueCountries.add(c.toLowerCase());
             }
 
-            const finalName = countryCode ? `[${countryCode.toUpperCase()}] ${name}` : name;
             const channelId = item.channel_id || res.channel_id;
             const streamUrl = `${config.STREAM_BASE_URL}?infohash=${infohash}`;
 
-            if (!groupToItems[assignedGroup]) {
-                groupToItems[assignedGroup] = [];
-                groupToInfohashes[assignedGroup] = [];
+            for (const groupInfo of assignedGroups) {
+                const gName = groupInfo.name;
+                const cCode = groupInfo.countryCode;
+                const finalName = cCode ? `[${cCode.toUpperCase()}] ${name}` : name;
+
+                if (!groupToItems[gName]) {
+                    groupToItems[gName] = [];
+                    groupToInfohashes[gName] = [];
+                }
+                groupToItems[gName].push(new PlaylistRow(finalName, streamUrl, {
+                    tvgName: finalName,
+                    tvgId: channelId,
+                    logo: logo,
+                    group: gName,
+                    epgTitle: epgTitle
+                }));
+                groupToInfohashes[gName].push(`${name}: ${infohash}`);
             }
-            groupToItems[assignedGroup].push(new PlaylistRow(finalName, streamUrl, {
-                tvgName: finalName,
-                tvgId: channelId,
-                logo: logo,
-                group: assignedGroup,
-                epgTitle: epgTitle
-            }));
-            groupToInfohashes[assignedGroup].push(`${name}: ${infohash}`);
-            break; // Found the first matching group for this infohash, don't look for more
+            break; // We processed this result via its first item that has an infohash
         }
     }
 
