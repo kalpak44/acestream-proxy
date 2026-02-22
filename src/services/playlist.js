@@ -241,6 +241,5 @@ async function writePlaylistIfStale(force = false) {
 }
 
 module.exports = {
-  writePlaylistIfStale,
-  generateM3u8,
+  writePlaylistIfStale
 };
