@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const SEARCH_URL = process.env.ACESTREAM_SEARCH_URL || 'http://acestream-engine:6878/search';
-const STREAM_BASE_URL = process.env.ACESTREAM_STREAM_BASE || 'http://streaming-television.pavel-usanli.online:6878/ace/manifest.m3u8';
+const SEARCH_URL = process.env.ACESTREAM_SEARCH_URL || 'http://localhost:6878/search';
+const STREAM_BASE_URL = process.env.ACESTREAM_STREAM_BASE || 'http:/localhost:6878/ace/manifest.m3u8';
 const PAGE_SIZE = parseInt(process.env.ACESTREAM_PAGE_SIZE || '10', 10);
 const PLAYLIST_FILE = process.env.PLAYLIST_FILE || 'playlist.m3u8';
 const CACHE_TTL = parseInt(process.env.PLAYLIST_TTL || '3600', 10); // seconds
