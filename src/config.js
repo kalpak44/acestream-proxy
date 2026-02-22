@@ -13,13 +13,11 @@ const COUNTRY_MAP = [
         name: 'Болгария',
         external: ['https://iptv-org.github.io/iptv/languages/bul.m3u']
     },
-    {code: 'ca', name: 'Канада'},
     {
         code: 'cz',
         name: 'Чехия',
         external: ['https://iptv-org.github.io/iptv/languages/ces.m3u']
     },
-    {code: 'ee', name: 'Эстония'},
     {
         code: 'fr',
         name: 'Франция',
@@ -30,8 +28,6 @@ const COUNTRY_MAP = [
         name: 'Великобритания',
         external: ['https://iptv-org.github.io/iptv/languages/eng.m3u']
     },
-    {code: 'lt', name: 'Литва'},
-    {code: 'lv', name: 'Латвия'},
     {
         code: 'md',
         name: 'Молдова',
