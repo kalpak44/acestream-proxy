@@ -58,22 +58,22 @@ const CATEGORY_REMAP = [
     {
         sources: ['music', 'music_video', 'radijas'],
         name: 'Музыка',
-        external: ['https://iptv-org.github.io/iptv/categories/music.m3u']
+        external: []
     },
     {
         sources: ['educational', 'documentaries'],
         name: 'Познавательные',
-        external: ['https://iptv-org.github.io/iptv/categories/documentary.m3u', 'https://iptv-org.github.io/iptv/categories/education.m3u']
+        external: []
     },
     {sources: ['entertaining'], name: 'Развлекательные', external: []},
-    {sources: ['kids'], name: 'Детские', external: ['https://iptv-org.github.io/iptv/categories/kids.m3u']},
+    {sources: ['kids'], name: 'Детские', external: []},
     {sources: ['movies'], name: 'Кино', external: []},
     {
         sources: ['other', 'amateur', 'emilia', 'informational', 'fashion', 'kameros', 'regional', 'teleshop', 'tv', 'vari', 'emilia romagna', 'religion', 'regional'],
         name: 'Прочее',
         external: []
     },
-    {sources: ['sport'], name: 'Спорт', external: ['https://iptv-org.github.io/iptv/categories/sports.m3u']},
+    {sources: ['sport'], name: 'Спорт', external: []},
 ];
 
 const INFOHASH_CATEGORY_OVERRIDE = {
