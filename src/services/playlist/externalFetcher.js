@@ -31,16 +31,13 @@ async function fetchExternalPlaylist(url, label) {
 
                 const logoMatch = trimmed.match(/tvg-logo="([^"]*)"/);
                 if (logoMatch) logo = logoMatch[1];
-
-                const groupMatch = trimmed.match(/group-title="([^"]*)"/);
-                // We strictly use the provided label as the group, ignoring any group-title from the external M3U
                 group = label;
 
                 const commaIdx = trimmed.lastIndexOf(',');
                 if (commaIdx !== -1) {
                     const originalName = trimmed.substring(commaIdx + 1).trim();
                     name = `External ${originalName}`;
-                    // Ensure tvgName also has the "External " prefix if it was parsed or if it defaults to the name
+                    // Ensure tvgName also has the "External" prefix if it was parsed or if it defaults to the name
                     tvgName = `External ${tvgName || originalName}`;
                 }
 
