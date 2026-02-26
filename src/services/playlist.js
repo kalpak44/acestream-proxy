@@ -3,7 +3,6 @@ const logger = require('../logger');
 const {fetchAllResults} = require('./acestream');
 const config = require('../config');
 
-const PlaylistRow = require('./playlist/PlaylistRow');
 const PlaylistWriter = require('./playlist/PlaylistWriter');
 const {fetchExternalPlaylist} = require('./playlist/externalFetcher');
 const {generateM3u8} = require('./playlist/generator');
