@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 const SEARCH_URL = process.env.ACESTREAM_SEARCH_URL || 'http://localhost:6878/search';
 const STREAM_BASE_URL = process.env.ACESTREAM_STREAM_BASE || 'http:/localhost:6878/ace/manifest.m3u8';
-const PAGE_SIZE = parseInt(process.env.ACESTREAM_PAGE_SIZE || '10', 10);
+const PAGE_SIZE = parseInt(process.env.ACESTREAM_PAGE_SIZE || '50', 10);
 const PLAYLIST_FILE = process.env.PLAYLIST_FILE || 'playlist.m3u8';
 const CACHE_TTL = parseInt(process.env.PLAYLIST_TTL || '3600', 10); // seconds
 const PORT = process.env.PORT || 8000;
@@ -31,7 +31,7 @@ const CATEGORY_REMAP = [{
     sources: ['kids'],
     name: 'Детские',
     external: []
-}, {sources: ['movies'], name: 'Кино', external: []}, {
+}, {sources: ['movies', 'cinema', 'films', 'films_hd'], name: 'Кино', external: []}, {
     sources: ['other', 'amateur', 'emilia', 'informational', 'fashion', 'kameros', 'regional', 'teleshop', 'tv', 'vari', 'emilia romagna', 'religion', 'regional'],
     name: 'Прочее',
     external: []
