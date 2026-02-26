@@ -41,7 +41,7 @@ async function fetchAllResults() {
                 try {
                      const retryResponse = await axios.get(SEARCH_URL, {
                          params: {page, page_size: PAGE_SIZE},
-                         timeout: 60000,
+                         timeout: 10000,
                      });
                      const data = retryResponse.data;
                      const result = data.result || {};
