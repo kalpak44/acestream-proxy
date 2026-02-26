@@ -17,6 +17,7 @@ function pickLogo(urls) {
 function generateM3u8(results) {
     const groupToItems = {};
     const groupToInfohashes = {};
+    const allInfohashes = [];
     const uniqueCountries = new Set();
     const uniqueCategories = new Set();
 
@@ -34,13 +35,19 @@ function generateM3u8(results) {
             const infohash = item.infohash;
             if (!infohash) continue;
 
+            const countries = item.countries || [];
+            const itemCategories = item.categories || [];
+
+            // Add all categories and infohashes to global sets for logging
+            for (const cat of itemCategories) {
+                uniqueCategories.add(cat.toLowerCase());
+            }
+            allInfohashes.push(`${name}: ${infohash}`);
+
             if (Array.isArray(config.INFOHASH_BLACKLIST) && config.INFOHASH_BLACKLIST.includes(infohash)) {
                 logger.info(`Skipping blacklisted infohash: ${infohash} (${name})`);
                 continue;
             }
-
-            const countries = item.countries || [];
-            const itemCategories = item.categories || [];
 
             const assignedGroups = []; // Change to collect all assigned groups
             let hasCategoryOverride = false;
@@ -97,9 +104,6 @@ function generateM3u8(results) {
 
             if (assignedGroups.length === 0) continue;
 
-            for (const cat of itemCategories) {
-                uniqueCategories.add(cat.toLowerCase());
-            }
             for (const c of countries) {
                 uniqueCountries.add(c.toLowerCase());
             }
@@ -131,6 +135,7 @@ function generateM3u8(results) {
 
     if (uniqueCountries.size > 0) logger.info(`Unique countries: ${Array.from(uniqueCountries).sort().join(', ')}`);
     if (uniqueCategories.size > 0) logger.info(`Unique categories: ${Array.from(uniqueCategories).sort().join(', ')}`);
+    if (allInfohashes.length > 0) logger.info(`All found infohashes:\n  ${allInfohashes.join('\n  ')}`);
 
     for (const [group, infohashes] of Object.entries(groupToInfohashes)) {
         logger.info(`Group "${group}" infohashes:\n  ${infohashes.join('\n  ')}`);
