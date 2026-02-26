@@ -34,6 +34,11 @@ function generateM3u8(results) {
             const infohash = item.infohash;
             if (!infohash) continue;
 
+            if (Array.isArray(config.INFOHASH_BLACKLIST) && config.INFOHASH_BLACKLIST.includes(infohash)) {
+                logger.info(`Skipping blacklisted infohash: ${infohash} (${name})`);
+                continue;
+            }
+
             const countries = item.countries || [];
             const itemCategories = item.categories || [];
 
