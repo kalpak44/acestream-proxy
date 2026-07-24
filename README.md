@@ -74,6 +74,32 @@ npm install
 npm start
 ```
 
+## Channel matching
+
+Each source channel is matched to an AceStream infohash by comparing normalized
+names through a tiered fallback (stop at first hit, prefer stricter tiers):
+
+1. **tier 0 — strict**: NFKC → lowercase → non-alphanumerics collapsed to spaces.
+2. **tier 1 — quality-agnostic**: tier 0 minus `hd`, `fhd`, `uhd`, `sd`, `4k`, `hevc`, `h265`, `h264`.
+3. **tier 2 — timezone-agnostic**: tier 0 minus `+N`, `(+N)`, `СНГ`, `Мир`, `Планета`, `Международная`, `EU`, `East`, `West`.
+4. **tier 3 — both stripped**: last-chance exact match.
+5. **tier 4 — fuzzy**: bigram similarity ≥ 0.85 against the AceStream tier-0 keys.
+
+Every build logs a per-tier hit count and the first 20 unmatched channels with
+their normalized keys and nearest AceStream candidates.
+
+## Diagnostics
+
+Two scripts help profile matches without redeploying the container:
+
+- `scripts/dump-acestream.sh` — run on the Docker host to dump every page of the
+  engine's `/search` into `acestream-dump.json`. Uses `docker exec` on the
+  playlist container so it can reach the engine over the private compose
+  network. Requires `docker` and `jq`.
+- `scripts/diagnose-matching.js` — offline analyzer. Reads the dump and the
+  live source M3U, runs the same tiered matcher, and prints per-tier hit
+  counts plus unmatched samples with nearest candidates.
+
 ## M3U8 output format
 
 The header advertises the EPG URL, and each channel is emitted with the metadata carried over from

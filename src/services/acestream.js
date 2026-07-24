@@ -1,13 +1,7 @@
 const axios = require('axios');
 const logger = require('../logger');
 const {SEARCH_URL, PAGE_SIZE} = require('../config');
-
-function normalizeName(name) {
-    return String(name || '')
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .trim();
-}
+const {tierKeys} = require('./matching');
 
 function pickLogo(icons) {
     if (!Array.isArray(icons) || icons.length === 0) return '';
@@ -32,10 +26,20 @@ async function fetchPage(page) {
     }
 }
 
+function addToTier(map, key, entry) {
+    if (!key) return;
+    const bucket = map.get(key);
+    if (bucket) {
+        bucket.push(entry);
+    } else {
+        map.set(key, [entry]);
+    }
+}
+
 async function buildInfohashIndex() {
-    const index = new Map();
+    const byTier = [new Map(), new Map(), new Map(), new Map()];
+    const entries = [];
     let page = 1;
-    let totalAdded = 0;
 
     while (true) {
         logger.info(`Fetching AceStream search page ${page}...`);
@@ -47,26 +51,32 @@ async function buildInfohashIndex() {
             const infohashItem = items.find((it) => it && it.infohash);
             if (!infohashItem) continue;
 
-            const key = normalizeName(res.name);
-            if (!key || index.has(key)) continue;
+            const name = res.name || '';
+            const keys = tierKeys(name);
+            if (!keys.t0) continue;
 
-            index.set(key, {
+            const entry = {
+                name,
+                keys,
                 infohash: infohashItem.infohash,
                 channelId: infohashItem.channel_id || res.channel_id || '',
                 logo: pickLogo(res.icons),
-            });
-            totalAdded += 1;
+            };
+            entries.push(entry);
+            addToTier(byTier[0], keys.t0, entry);
+            addToTier(byTier[1], keys.t1, entry);
+            addToTier(byTier[2], keys.t2, entry);
+            addToTier(byTier[3], keys.t3, entry);
         }
 
-        logger.info(`AceStream index now holds ${index.size} unique names (page ${page}, +${results.length} raw).`);
+        logger.info(`AceStream index now holds ${entries.length} entries (page ${page}, +${results.length} raw).`);
         page += 1;
     }
 
-    logger.info(`AceStream infohash index built: ${index.size} unique channels (from ${totalAdded} candidates).`);
-    return index;
+    logger.info(`AceStream infohash index built: ${entries.length} entries with infohash across ${byTier[0].size} unique tier-0 names.`);
+    return {byTier, entries};
 }
 
 module.exports = {
     buildInfohashIndex,
-    normalizeName,
 };
