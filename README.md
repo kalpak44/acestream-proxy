@@ -13,7 +13,11 @@ internal cron job.
    - Paginates the AceStream `search` endpoint and builds an in-memory `name → infohash` index.
    - Matches each source channel to an AceStream entry by normalized `tvg-name` / display name.
    - Streams the resulting playlist to disk with an atomic rename.
-2. `GET /playlist.m3u8` serves the last successful build. Groups, logos, and EPG ids come from the
+2. After the source pass, the service fetches each entry in `INWEBVIEW_SOURCES` (default:
+   inwebview.com/category/3 → `Кино`, inwebview.com/category/5 → `Россия`), extracts channel
+   names, resolves them via the same tiered matcher, and appends anything whose AceStream
+   infohash isn't already in the playlist.
+3. `GET /playlist.m3u8` serves the last successful build. Groups, logos, and EPG ids come from the
    source playlist — no manual overrides.
 
 ## Configuration
@@ -37,6 +41,11 @@ All configuration is done via environment variables. Defaults are shown in paren
     - File name of the generated playlist on disk.
 - `PORT` (`8000`)
     - The port the HTTP server listens on.
+- `INWEBVIEW_SOURCES`
+    - JSON array of `{url, group}` pairs. After the source-M3U pass, each URL is fetched, channel
+      names are extracted, and any that resolve to an AceStream infohash not already in the
+      playlist are appended to the given group. Set to `[]` to disable. Defaults live in
+      `src/config.js`.
 
 ## API
 

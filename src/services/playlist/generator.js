@@ -2,6 +2,7 @@ const logger = require('../../logger');
 const config = require('../../config');
 const PlaylistRow = require('./PlaylistRow');
 const {streamSourceChannels} = require('./sourceFetcher');
+const {fetchInwebviewChannelNames} = require('../inwebview');
 const {tierKeys, bigramSimilarity} = require('../matching');
 
 const FUZZY_THRESHOLD = 0.85;
@@ -68,59 +69,63 @@ function topCandidates(sourceKeys, entries, limit) {
     return scored.slice(0, limit);
 }
 
-async function* generateRows(index) {
+function resolveChannel(channel, index) {
     const {byTier, entries} = index;
+    const primaryName = channel.tvgName || channel.displayName;
+    if (!primaryName) return {reason: 'noname'};
+
+    for (const cand of candidateNames(channel)) {
+        const sourceKeys = tierKeys(cand);
+        const found = lookupExact(sourceKeys, byTier);
+        if (found) return {hit: {...found, sourceKeys}};
+    }
+
+    const primaryKeys = tierKeys(primaryName);
+    const fuzzy = lookupFuzzy(primaryKeys, entries);
+    if (fuzzy) return {hit: {...fuzzy, sourceKeys: primaryKeys}};
+    return {reason: 'nomatch', keys: primaryKeys};
+}
+
+async function* generateRows(index) {
+    const {entries} = index;
     const tierHits = [0, 0, 0, 0, 0];
     const unmatched = [];
+    const emittedInfohashes = new Set();
     let matched = 0;
     let skippedNoName = 0;
     let skippedBadInfohash = 0;
     let sampleUrlsLogged = 0;
 
     for await (const channel of streamSourceChannels(config.SOURCE_PLAYLIST_URL)) {
-        const primaryName = channel.tvgName || channel.displayName;
-        if (!primaryName) {
+        const result = resolveChannel(channel, index);
+        if (result.reason === 'noname') {
             skippedNoName += 1;
             continue;
         }
-
-        let hit = null;
-        for (const cand of candidateNames(channel)) {
-            const sourceKeys = tierKeys(cand);
-            const found = lookupExact(sourceKeys, byTier);
-            if (found) {
-                hit = {...found, sourceKeys};
-                break;
-            }
-        }
-
-        if (!hit) {
-            const primaryKeys = tierKeys(primaryName);
-            const fuzzy = lookupFuzzy(primaryKeys, entries);
-            if (fuzzy) {
-                hit = {...fuzzy, sourceKeys: primaryKeys};
-            } else if (unmatched.length < UNMATCHED_LOG_LIMIT) {
+        if (result.reason === 'nomatch') {
+            if (unmatched.length < UNMATCHED_LOG_LIMIT) {
                 unmatched.push({
                     tvgName: channel.tvgName,
                     displayName: channel.displayName,
                     group: channel.group,
-                    keys: primaryKeys,
-                    candidates: topCandidates(primaryKeys, entries, CANDIDATES_PER_UNMATCHED),
+                    keys: result.keys,
+                    candidates: topCandidates(result.keys, entries, CANDIDATES_PER_UNMATCHED),
                 });
             }
+            continue;
         }
 
-        if (!hit) continue;
-
+        const {hit} = result;
         const {match} = hit;
         if (!INFOHASH_RE.test(match.infohash || '')) {
             skippedBadInfohash += 1;
-            logger.warn(`Skipping "${primaryName}" — infohash "${match.infohash}" is not a 40-char hex string.`);
+            logger.warn(`Skipping "${channel.tvgName || channel.displayName}" — infohash "${match.infohash}" is not a 40-char hex string.`);
             continue;
         }
 
         tierHits[hit.tier] += 1;
         matched += 1;
+        emittedInfohashes.add(match.infohash);
 
         const name = channel.displayName || channel.tvgName || 'Unknown';
         const streamUrl = buildStreamUrl(config.STREAM_BASE_URL, match.infohash);
@@ -139,7 +144,7 @@ async function* generateRows(index) {
     }
 
     logger.info(
-        `Match summary — total matched: ${matched}, tier0: ${tierHits[0]}, tier1: ${tierHits[1]}, ` +
+        `Source match summary — matched: ${matched}, tier0: ${tierHits[0]}, tier1: ${tierHits[1]}, ` +
         `tier2: ${tierHits[2]}, tier3: ${tierHits[3]}, fuzzy(tier4): ${tierHits[4]}, ` +
         `unmatched-with-samples: ${unmatched.length}, skipped-noname: ${skippedNoName}, ` +
         `skipped-bad-infohash: ${skippedBadInfohash}.`
@@ -152,6 +157,72 @@ async function* generateRows(index) {
             ? u.candidates.map((c) => `"${c.entry.name}"(${c.score.toFixed(2)})`).join(', ')
             : '(no candidates above 0)';
         logger.info(`Unmatched ${label} keys=[${keys}] nearest=[${cands}]`);
+    }
+
+    for (const source of config.INWEBVIEW_SOURCES || []) {
+        if (!source || !source.url || !source.group) continue;
+
+        let extraNames = [];
+        try {
+            extraNames = await fetchInwebviewChannelNames(source.url);
+        } catch (err) {
+            logger.warn(`Failed to fetch extra channel names from ${source.url}: ${err.message}`);
+            continue;
+        }
+
+        const extraTierHits = [0, 0, 0, 0, 0];
+        let extraAppended = 0;
+        let extraDedup = 0;
+        let extraUnmatched = 0;
+        const unmatchedExtras = [];
+
+        for (const name of extraNames) {
+            const result = resolveChannel({tvgName: name, displayName: name}, index);
+            if (result.reason === 'noname' || result.reason === 'nomatch') {
+                extraUnmatched += 1;
+                if (unmatchedExtras.length < UNMATCHED_LOG_LIMIT && result.keys) {
+                    unmatchedExtras.push({
+                        name,
+                        keys: result.keys,
+                        candidates: topCandidates(result.keys, entries, CANDIDATES_PER_UNMATCHED),
+                    });
+                }
+                continue;
+            }
+            const {hit} = result;
+            const {match} = hit;
+            if (!INFOHASH_RE.test(match.infohash || '')) continue;
+            if (emittedInfohashes.has(match.infohash)) {
+                extraDedup += 1;
+                continue;
+            }
+
+            emittedInfohashes.add(match.infohash);
+            extraTierHits[hit.tier] += 1;
+            extraAppended += 1;
+
+            const streamUrl = buildStreamUrl(config.STREAM_BASE_URL, match.infohash);
+            yield new PlaylistRow(name, streamUrl, {
+                tvgName: name,
+                tvgId: match.channelId || '',
+                logo: match.logo || '',
+                group: source.group,
+            });
+        }
+
+        logger.info(
+            `Extra source (${source.url}) — appended: ${extraAppended} to "${source.group}", ` +
+            `tier0: ${extraTierHits[0]}, tier1: ${extraTierHits[1]}, tier2: ${extraTierHits[2]}, ` +
+            `tier3: ${extraTierHits[3]}, fuzzy(tier4): ${extraTierHits[4]}, ` +
+            `dedup-existing-infohash: ${extraDedup}, unmatched: ${extraUnmatched}.`
+        );
+        for (const u of unmatchedExtras) {
+            const keys = `t0="${u.keys.t0}" t1="${u.keys.t1}" t2="${u.keys.t2}" t3="${u.keys.t3}"`;
+            const cands = u.candidates.length
+                ? u.candidates.map((c) => `"${c.entry.name}"(${c.score.toFixed(2)})`).join(', ')
+                : '(no candidates above 0)';
+            logger.info(`Unmatched extra "${u.name}" keys=[${keys}] nearest=[${cands}]`);
+        }
     }
 }
 
