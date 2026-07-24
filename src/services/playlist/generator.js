@@ -3,6 +3,7 @@ const config = require('../../config');
 const PlaylistRow = require('./PlaylistRow');
 const {streamSourceChannels} = require('./sourceFetcher');
 const {fetchInwebviewChannelNames} = require('../inwebview');
+const {fetchSearchAceChannels} = require('../searchAce');
 const {tierKeys, bigramSimilarity} = require('../matching');
 
 const FUZZY_THRESHOLD = 0.85;
@@ -88,6 +89,7 @@ function resolveChannel(channel, index) {
 
 async function* generateRows(index) {
     const {entries} = index;
+    const knownInfohashes = new Set(entries.map((e) => e.infohash));
     const tierHits = [0, 0, 0, 0, 0];
     const unmatched = [];
     const emittedInfohashes = new Set();
@@ -223,6 +225,43 @@ async function* generateRows(index) {
                 : '(no candidates above 0)';
             logger.info(`Unmatched extra "${u.name}" keys=[${keys}] nearest=[${cands}]`);
         }
+    }
+
+    const categoryMap = config.SEARCH_ACE_CATEGORY_MAP || {};
+    for (const [category, group] of Object.entries(categoryMap)) {
+        let aceChannels = [];
+        try {
+            aceChannels = await fetchSearchAceChannels(category, config.SEARCH_ACE_LANG);
+        } catch (err) {
+            logger.warn(`Failed to fetch search-ace.stream category "${category}": ${err.message}`);
+            continue;
+        }
+
+        let appended = 0;
+        let dedup = 0;
+        let unknown = 0;
+
+        for (const {name, infohash} of aceChannels) {
+            if (!INFOHASH_RE.test(infohash)) continue;
+            if (emittedInfohashes.has(infohash)) {
+                dedup += 1;
+                continue;
+            }
+            if (!knownInfohashes.has(infohash)) {
+                unknown += 1;
+                continue;
+            }
+
+            emittedInfohashes.add(infohash);
+            appended += 1;
+            const streamUrl = buildStreamUrl(config.STREAM_BASE_URL, infohash);
+            yield new PlaylistRow(name, streamUrl, {tvgName: name, group});
+        }
+
+        logger.info(
+            `search-ace.stream category "${category}" → "${group}": appended ${appended}, ` +
+            `dedup ${dedup}, not-in-engine ${unknown}.`
+        );
     }
 }
 

@@ -23,6 +23,24 @@ const INWEBVIEW_SOURCES = process.env.INWEBVIEW_SOURCES
     ? JSON.parse(process.env.INWEBVIEW_SOURCES)
     : DEFAULT_INWEBVIEW_SOURCES;
 
+// Country-code tag used to filter search-ace.stream channels, e.g. 'RU' keeps only channels
+// whose name contains [RU]. Set to null to disable filtering.
+const SEARCH_ACE_LANG = process.env.SEARCH_ACE_LANG !== undefined ? (process.env.SEARCH_ACE_LANG || null) : 'RU';
+
+// Maps AceStream API category slugs to existing playlist group names.
+// Only categories present here are fetched from search-ace.stream.
+const SEARCH_ACE_CATEGORY_MAP = {
+    informational:  'Россия',
+    entertaining:   'Разное',
+    educational:    'Познавательные',
+    movies:         'Кино',
+    documentaries:  'Познавательные',
+    sport:          'Спорт',
+    music:          'Музыкальные',
+    regional:       'Россия',
+    cyber_games:    'Спорт',
+};
+
 module.exports = {
     SEARCH_URL,
     STREAM_BASE_URL,
@@ -33,4 +51,6 @@ module.exports = {
     EPG_URL,
     CRON_SCHEDULE,
     INWEBVIEW_SOURCES,
+    SEARCH_ACE_CATEGORY_MAP,
+    SEARCH_ACE_LANG,
 };
