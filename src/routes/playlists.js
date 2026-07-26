@@ -67,12 +67,12 @@ router.post('/playlists/:id/update', async (req, res) => {
             await removePlaylistFile(oldId).catch((err) => logger.warn(`Cleanup after playlist ID change failed for ${oldId}: ${err.message}`));
         }
         await fireRebuild(p.id, req.session.user);
-        res.redirect(`/playlists?flash=updated:${encodeURIComponent(p.id)}`);
+        redirectDetailWithFlash(res, p.id, 'updated');
     } catch (err) {
         if (err.code === 'NOT_FOUND') return redirectWithError(res, 'Playlist not found.');
-        if (err.code === 'BAD_ID' || err.code === 'DUP_ID') return redirectWithError(res, err.message);
+        if (err.code === 'BAD_ID' || err.code === 'DUP_ID') return redirectDetailWithError(res, oldId, err.message);
         logger.error(`Playlist update failed: ${err.message}`);
-        redirectWithError(res, 'Failed to update playlist.');
+        redirectDetailWithError(res, oldId, 'Failed to update playlist.');
     }
 });
 

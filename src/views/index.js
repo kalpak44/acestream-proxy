@@ -128,8 +128,8 @@ function parseFlash(flash) {
     if (!flash) return null;
     const [kind, ...rest] = String(flash).split(':');
     const target = rest.join(':');
-    if (kind === 'created') return `Created playlist. ID: ${target}`;
-    if (kind === 'updated') return `Updated playlist. ID: ${target}`;
+    if (kind === 'created') return `Playlist created.`;
+    if (kind === 'updated') return `Playlist settings saved.`;
     if (kind === 'stream-kind-saved') return 'Stream kind saved.';
     if (kind === 'category-added') return 'Category added.';
     if (kind === 'category-updated') return 'Category updated.';
@@ -141,49 +141,34 @@ function parseFlash(flash) {
     return null;
 }
 
-function playlistRow({playlist, baseUrl}) {
+function playlistCard({playlist, baseUrl}) {
     const idAttr = escapeHtml(playlist.id);
-    const nameAttr = escapeHtml(playlist.name);
     const url = `${baseUrl}/${playlist.id}/playlist.m3u8`;
     const urlHtml = escapeHtml(url);
+    const catCount = (playlist.categories || []).length;
+    const chCount = (playlist.channels || []).length;
+    const stats = `${catCount} categor${catCount === 1 ? 'y' : 'ies'} · ${chCount} channel${chCount === 1 ? '' : 's'}`;
     return `
-<tr class="border-t border-slate-800 align-top">
-  <td class="px-4 py-4">
-    <form method="post" action="/playlists/${idAttr}/update" class="flex flex-col gap-2">
-      <label class="block">
-        <span class="text-xs uppercase tracking-wide text-slate-500">Name</span>
-        <input name="name" value="${nameAttr}"
-               class="mt-1 w-full rounded-md bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 px-3 py-1.5 text-sm">
-      </label>
-      <label class="block">
-        <span class="text-xs uppercase tracking-wide text-slate-500">ID (bearer token)</span>
-        <input name="id" value="${idAttr}" pattern="[a-z0-9]{4,64}" required
-               title="4–64 chars of a–z or 0–9"
-               class="mt-1 w-full rounded-md bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 px-3 py-1.5 text-sm font-mono">
-      </label>
-      <div>
-        <button class="rounded-md bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-sm font-medium">Save</button>
-      </div>
-    </form>
-  </td>
-  <td class="px-4 py-4">
-    <div class="flex items-start gap-2">
-      <a class="text-indigo-400 hover:text-indigo-300 underline font-mono text-xs break-all"
+<div class="flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/40 px-5 py-4">
+  <div class="flex-1 min-w-0 space-y-1.5">
+    <h3 class="text-sm font-semibold">${escapeHtml(playlist.name)}</h3>
+    <p class="text-xs text-slate-500">${stats}</p>
+    <div class="flex items-center gap-2">
+      <a class="text-indigo-400 hover:text-indigo-300 font-mono text-xs truncate max-w-sm"
          href="/${idAttr}/playlist.m3u8">${urlHtml}</a>
       <button type="button" data-copy="${urlHtml}"
-              class="shrink-0 text-xs text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1">Copy</button>
+              class="shrink-0 text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-1.5 py-0.5">Copy</button>
     </div>
-    <p class="mt-2 text-xs text-slate-500">Created ${escapeHtml(playlist.createdAt)}</p>
-  </td>
-  <td class="px-4 py-4 text-right">
-    <div class="flex flex-col items-end gap-2">
-      <a href="/playlists/${idAttr}" class="text-sm text-indigo-300 hover:text-indigo-200">Configure →</a>
-      <form method="post" action="/playlists/${idAttr}/delete" onsubmit="return confirm('Delete this playlist? The public URL will stop working.');">
-        <button class="text-sm text-rose-400 hover:text-rose-300">Delete</button>
-      </form>
-    </div>
-  </td>
-</tr>`;
+  </div>
+  <div class="flex items-center gap-4 shrink-0">
+    <a href="/playlists/${idAttr}"
+       class="rounded-md bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-sm font-medium">Configure</a>
+    <form method="post" action="/playlists/${idAttr}/delete"
+          onsubmit="return confirm('Delete this playlist? The public URL will stop working.');">
+      <button class="text-sm text-rose-400 hover:text-rose-300">Delete</button>
+    </form>
+  </div>
+</div>`;
 }
 
 function renderPlaylists({user, playlists = [], baseUrl, flash, error} = {}) {
@@ -196,18 +181,7 @@ function renderPlaylists({user, playlists = [], baseUrl, flash, error} = {}) {
         : '';
 
     const table = playlists.length ? `
-<div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/50">
-  <table class="min-w-full text-sm">
-    <thead class="bg-slate-900/70">
-      <tr>
-        <th class="text-left px-4 py-3 text-slate-400 font-medium">Playlist</th>
-        <th class="text-left px-4 py-3 text-slate-400 font-medium">Public link</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>${playlists.map((p) => playlistRow({playlist: p, baseUrl})).join('')}</tbody>
-  </table>
-</div>` : `
+<div class="space-y-3">${playlists.map((p) => playlistCard({playlist: p, baseUrl})).join('')}</div>` : `
 <div class="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 p-10 text-center text-slate-400">
   No playlists yet. Create one to get started.
 </div>`;
@@ -632,13 +606,13 @@ function renderPlaylistDetail({user, playlist, baseUrl, lastBuiltAt, fileBytes, 
     </form>
   </td>
   <td class="px-3 py-2 font-mono text-xs text-slate-400 break-all">${escapeHtml(ch.infohash)}</td>
-  <td class="px-3 py-2 text-xs text-slate-500">
+  <td class="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">
     <div class="flex items-center gap-1.5">
-      <span class="inline-block h-1.5 w-1.5 rounded-full ${dotColor}"></span>
-      ${bitrateText ? `<span>${escapeHtml(bitrateText)}</span>` : ''}
+      <span class="inline-block h-1.5 w-1.5 rounded-full ${dotColor} shrink-0"></span>
+      <span>${bitrateText ? escapeHtml(bitrateText) : '—'}</span>
     </div>
-    <div class="text-slate-600 mt-0.5">${escapeHtml(ch.addedAt)}</div>
   </td>
+  <td class="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(ch.addedAt)}</td>
   <td class="px-3 py-2 text-right">
     <form method="post" action="/playlists/${idAttr}/channels/${escapeHtml(ch.id)}/delete">
       <button class="text-xs text-rose-400 hover:text-rose-300">Remove</button>
@@ -654,6 +628,7 @@ function renderPlaylistDetail({user, playlist, baseUrl, lastBuiltAt, fileBytes, 
       <tr>
         <th class="text-left px-3 py-2 font-medium">Name</th>
         <th class="text-left px-3 py-2 font-medium">Infohash</th>
+        <th class="text-left px-3 py-2 font-medium">Bitrate</th>
         <th class="text-left px-3 py-2 font-medium">Added</th>
         <th></th>
       </tr>
@@ -696,42 +671,54 @@ ${header({user, active: '/playlists'})}
   <nav class="text-sm text-slate-400"><a href="/playlists" class="hover:text-slate-200">Playlists</a> <span class="text-slate-600 mx-1">/</span> <span class="text-slate-200">${escapeHtml(playlist.name)}</span></nav>
   ${flashBlock}${errorBlock}
 
-  <section class="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-3">
-    <div>
-      <h1 class="text-2xl font-semibold">${escapeHtml(playlist.name)}</h1>
-      <p class="text-xs text-slate-500 mt-1">ID: <span class="font-mono text-slate-300">${idAttr}</span></p>
-    </div>
-    <div class="space-y-1">
-      <div class="flex items-start gap-2 text-sm">
-        <span class="text-xs uppercase tracking-wide text-slate-500 w-14 shrink-0 pt-0.5">M3U</span>
-        <a class="text-indigo-400 hover:text-indigo-300 underline font-mono text-xs break-all" href="/${idAttr}/playlist.m3u8">${urlHtml}</a>
-        <button type="button" data-copy="${urlHtml}"
-                class="shrink-0 text-xs text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1">Copy</button>
-      </div>
-      <div class="flex items-start gap-2 text-sm">
-        <span class="text-xs uppercase tracking-wide text-slate-500 w-14 shrink-0 pt-0.5">EPG</span>
-        <a class="text-indigo-400 hover:text-indigo-300 underline font-mono text-xs break-all" href="/iptv/epg.xml">${escapeHtml(baseUrl)}/iptv/epg.xml</a>
-        <button type="button" data-copy="${escapeHtml(baseUrl)}/iptv/epg.xml"
-                class="shrink-0 text-xs text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1">Copy</button>
-      </div>
-    </div>
-    <p class="text-xs text-slate-500">${escapeHtml(buildStatus)}</p>
-  </section>
+  <section class="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-5">
+    <h1 class="text-xl font-semibold">${escapeHtml(playlist.name)}</h1>
 
-  <section class="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-3">
-    <h2 class="text-lg font-semibold">Stream flavor</h2>
-    <p class="text-xs text-slate-500">Which base URL to write into every M3U line. Change in <a href="/settings" class="text-indigo-400 hover:text-indigo-300 underline">Settings</a>.</p>
-    <form method="post" action="/playlists/${idAttr}/stream-kind" class="flex items-center gap-4">
-      <label class="inline-flex items-center gap-2 text-sm">
-        <input type="radio" name="streamKind" value="ts" ${playlist.streamKind !== 'hls' ? 'checked' : ''} class="accent-indigo-500">
-        MPEG-TS (HTTP-TCP)
+    <form method="post" action="/playlists/${idAttr}/update"
+          class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+      <label>
+        <span class="text-xs uppercase tracking-wide text-slate-500">Name</span>
+        <input name="name" value="${escapeHtml(playlist.name)}" required
+               class="mt-1 w-full rounded-md bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 px-3 py-1.5 text-sm">
       </label>
-      <label class="inline-flex items-center gap-2 text-sm">
-        <input type="radio" name="streamKind" value="hls" ${playlist.streamKind === 'hls' ? 'checked' : ''} class="accent-indigo-500">
-        HLS
+      <label>
+        <span class="text-xs uppercase tracking-wide text-slate-500">ID (bearer token)</span>
+        <input name="id" value="${idAttr}" pattern="[a-z0-9]{4,64}" required title="4–64 chars of a–z or 0–9"
+               class="mt-1 w-full rounded-md bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 px-3 py-1.5 text-sm font-mono">
       </label>
-      <button class="rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 text-sm">Save</button>
+      <button class="rounded-md bg-indigo-600 hover:bg-indigo-500 px-3 py-2 text-sm font-medium">Save</button>
     </form>
+
+    <div class="space-y-1.5 pt-1 border-t border-slate-800">
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-slate-500 w-10 shrink-0">M3U</span>
+        <a class="text-indigo-400 hover:text-indigo-300 font-mono text-xs truncate" href="/${idAttr}/playlist.m3u8">${urlHtml}</a>
+        <button type="button" data-copy="${urlHtml}"
+                class="shrink-0 text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-1.5 py-0.5">Copy</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-slate-500 w-10 shrink-0">EPG</span>
+        <a class="text-indigo-400 hover:text-indigo-300 font-mono text-xs truncate" href="/iptv/epg.xml">${escapeHtml(baseUrl)}/iptv/epg.xml</a>
+        <button type="button" data-copy="${escapeHtml(baseUrl)}/iptv/epg.xml"
+                class="shrink-0 text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-1.5 py-0.5">Copy</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between pt-1 border-t border-slate-800">
+      <form method="post" action="/playlists/${idAttr}/stream-kind" class="flex items-center gap-4">
+        <span class="text-xs uppercase tracking-wide text-slate-500">Stream</span>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="streamKind" value="ts" ${playlist.streamKind !== 'hls' ? 'checked' : ''} class="accent-indigo-500">
+          MPEG-TS
+        </label>
+        <label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="streamKind" value="hls" ${playlist.streamKind === 'hls' ? 'checked' : ''} class="accent-indigo-500">
+          HLS
+        </label>
+        <button class="rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 text-xs">Save</button>
+      </form>
+      <p class="text-xs text-slate-600">${escapeHtml(buildStatus)}</p>
+    </div>
   </section>
 
   <section class="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-4">
