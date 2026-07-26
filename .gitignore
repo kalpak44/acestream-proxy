@@ -118,6 +118,7 @@ dist
 
 # Project specific
 playlist.m3u8
+data/
 
 # IDE / Editor
 .vscode/

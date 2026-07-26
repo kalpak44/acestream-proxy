@@ -1,45 +1,46 @@
-const cron = require('node-cron');
-const app = require('./app');
 const logger = require('./logger');
-const {PORT, CRON_SCHEDULE} = require('./config');
-const {buildPlaylist} = require('./services/playlist');
+const {PORT, assertAuthConfig} = require('./config');
 
-async function buildWithRetries() {
-    const maxRetries = 10;
-    const retryDelay = 5000;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            await buildPlaylist();
-            return true;
-        } catch (error) {
-            logger.warn(`Playlist build attempt ${attempt} failed: ${error.message}`);
-            if (attempt < maxRetries) {
-                await new Promise((resolve) => setTimeout(resolve, retryDelay));
-            }
-        }
-    }
-    logger.error('Giving up playlist build after several attempts.');
-    return false;
+try {
+    assertAuthConfig();
+} catch (err) {
+    logger.error(err.message);
+    process.exit(1);
 }
 
-function scheduleDailyBuild() {
-    if (!cron.validate(CRON_SCHEDULE)) {
-        logger.error(`Invalid CRON_SCHEDULE "${CRON_SCHEDULE}"; daily rebuild disabled.`);
-        return;
-    }
-    cron.schedule(CRON_SCHEDULE, async () => {
-        logger.info(`Cron tick (${CRON_SCHEDULE}) — rebuilding playlist.`);
+const app = require('./app');
+const settings = require('./services/settings');
+const playlists = require('./services/playlists');
+const {rebuild} = require('./services/playlistBuilder');
+
+async function rebuildPlaylistsAtStartup() {
+    const all = await playlists.list();
+    let rebuilt = 0;
+    for (const playlist of all) {
         try {
-            await buildPlaylist();
-        } catch (error) {
-            logger.error(`Scheduled playlist rebuild failed: ${error.message}`);
+            await rebuild(playlist.id);
+            rebuilt += 1;
+        } catch (err) {
+            logger.error(`Startup rebuild failed for playlist ${playlist.id}: ${err.message}`);
         }
+    }
+    logger.info(`Startup rebuild completed for ${rebuilt}/${all.length} playlists.`);
+}
+
+async function start() {
+    try {
+        await settings.load();
+    } catch (err) {
+        logger.error(`Settings load failed: ${err.message}`);
+    }
+    try {
+        await rebuildPlaylistsAtStartup();
+    } catch (err) {
+        logger.error(`Startup playlist rebuild failed: ${err.message}`);
+    }
+    app.listen(PORT, '0.0.0.0', () => {
+        logger.info(`Server listening on port ${PORT}`);
     });
-    logger.info(`Scheduled playlist rebuild with cron "${CRON_SCHEDULE}".`);
 }
 
-app.listen(PORT, '0.0.0.0', async () => {
-    logger.info(`Server listening on port ${PORT}`);
-    scheduleDailyBuild();
-    await buildWithRetries();
-});
+start();
