@@ -2,7 +2,7 @@ const express = require('express');
 const logger = require('../logger');
 const {requireAuth} = require('../services/auth');
 const playlistsSvc = require('../services/playlists');
-const {removePlaylistFile, rebuild} = require('../services/playlistBuilder');
+const {playlistFilePath, removePlaylistFile, rebuild} = require('../services/playlistBuilder');
 const {renderPlaylists, renderPlaylistDetail} = require('../views');
 
 const router = express.Router();
