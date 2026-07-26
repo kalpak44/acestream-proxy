@@ -3,6 +3,7 @@ const fs = require('fs-extra');
 const path = require('node:path');
 const playlistsSvc = require('../services/playlists');
 const {playlistFilePath, epgFilePath, rebuild} = require('../services/playlistBuilder');
+const {buildCombinedEpgFile, combinedEpgFilePath} = require('../services/epgBuilder');
 
 const router = express.Router();
 
@@ -40,6 +41,22 @@ async function servePublicFile(req, res, {id, filePath, headers, missingMessage}
     if (req.method === 'HEAD') return res.status(200).end();
     res.sendFile(path.resolve(filePath));
 }
+
+router.all('/iptv/epg.xml', async (req, res) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).end();
+    try {
+        const allPlaylists = await playlistsSvc.list();
+        await buildCombinedEpgFile(allPlaylists);
+    } catch (_) {
+        return res.status(503).send('EPG not available.');
+    }
+    const filePath = combinedEpgFilePath();
+    const exists = await fs.pathExists(filePath);
+    if (!exists) return res.status(503).send('EPG not available.');
+    res.set(commonHeaders('epg.xml', 'application/xml; charset=utf-8'));
+    if (req.method === 'HEAD') return res.status(200).end();
+    res.sendFile(path.resolve(filePath));
+});
 
 router.all('/:id/playlist.m3u8', (req, res) => servePublicFile(req, res, {
     id: req.params.id,

@@ -93,7 +93,7 @@ router.get('/search', async (req, res) => {
 });
 
 router.post('/search/add-channel', async (req, res) => {
-    const {target, name, infohash} = req.body || {};
+    const {target, name, infohash, icon} = req.body || {};
     const [playlistId, categoryId] = String(target || '').split(':');
     const backParams = new URLSearchParams();
     for (const k of ['q', 'category', 'page', 'page_size', 'target']) {
@@ -110,7 +110,7 @@ router.post('/search/add-channel', async (req, res) => {
     if (!playlistId || !categoryId) return res.redirect(backWith({error: 'Pick a playlist and category.'}));
 
     try {
-        await playlistsSvc.addChannel(playlistId, {name, infohash, categoryId});
+        await playlistsSvc.addChannel(playlistId, {name, infohash, icon, categoryId});
         try { await rebuild(playlistId); } catch (e) { logger.warn(`Rebuild after add-from-search failed: ${e.message}`); }
         logger.info(`Channel "${name}" added to ${playlistId}/${categoryId} from search by "${req.session.user}".`);
         return res.redirect(backWith({flash: `added:${playlistId}`}));

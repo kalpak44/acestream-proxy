@@ -5,7 +5,7 @@ const logger = require('../logger');
 const playlists = require('./playlists');
 const settings = require('./settings');
 const {buildStreamUrl} = require('./acestream');
-const {buildEpgFile, removeEpgFile, epgFilePath} = require('./epgBuilder');
+const {buildEpgFile, buildCombinedEpgFile, removeEpgFile, epgFilePath} = require('./epgBuilder');
 
 const rebuildLocks = new Map();
 
@@ -21,15 +21,15 @@ function escapeAttr(v) {
     return sanitizeText(v).replace(/"/g, '\'');
 }
 
-function epgUrlFor(playlistId) {
+function epgUrlFor() {
     const base = settings.effective().publicBaseUrl;
     if (!base) return '';
-    return `${base}/${playlistId}/epg.xml`;
+    return `${base}/iptv/epg.xml`;
 }
 
 function renderPlaylist(playlist) {
     const categoriesById = new Map(playlist.categories.map((c) => [c.id, c]));
-    const epgUrl = epgUrlFor(playlist.id);
+    const epgUrl = epgUrlFor();
     const header = epgUrl ? `#EXTM3U url-tvg="${escapeAttr(epgUrl)}"` : '#EXTM3U';
     const lines = [header];
 
@@ -45,8 +45,9 @@ function renderPlaylist(playlist) {
             }
             const groupName = categoriesById.get(ch.categoryId)?.name || '';
             const displayName = sanitizeText(ch.name) || 'Unnamed';
+            const logoAttr = ch.icon ? ` tvg-logo="${escapeAttr(ch.icon)}"` : '';
             lines.push(`#EXTGRP:${sanitizeText(groupName)}`);
-            lines.push(`#EXTINF:-1 tvg-id="${escapeAttr(ch.id)}" tvg-name="${escapeAttr(ch.name)}" group-title="${escapeAttr(groupName)}",${displayName}`);
+            lines.push(`#EXTINF:-1 tvg-id="${escapeAttr(ch.infohash)}" tvg-name="${escapeAttr(ch.name)}"${logoAttr} group-title="${escapeAttr(groupName)}",${displayName}`);
             lines.push(streamUrl);
         }
     }
@@ -61,6 +62,8 @@ async function buildPlaylistFile(playlist) {
     await fs.writeFile(tmp, content);
     await fs.move(tmp, target, {overwrite: true});
     const epg = await buildEpgFile(playlist);
+    const allPlaylists = await playlists.list();
+    const combinedEpg = await buildCombinedEpgFile(allPlaylists);
     if (skipped > 0) {
         logger.warn(`Playlist "${playlist.name}" (${playlist.id}): skipped ${skipped} channel(s) — no stream base URL configured for kind "${playlist.streamKind || 'ts'}".`);
     }
@@ -70,6 +73,7 @@ async function buildPlaylistFile(playlist) {
         skippedCount: skipped,
         bytes: Buffer.byteLength(content, 'utf8'),
         epg,
+        combinedEpg,
     };
 }
 

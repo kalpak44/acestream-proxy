@@ -281,7 +281,7 @@ function buildTargetOptions(playlists, selectedValue) {
         }).join('');
 }
 
-function addToPlaylistForm({item, resultName, targetOptions, form, hasTargets, hasPinnedTarget}) {
+function addToPlaylistForm({item, resultName, resultIcon, targetOptions, form, hasTargets, hasPinnedTarget}) {
     if (!hasTargets) {
         return `<a href="/playlists" class="shrink-0 text-xs text-slate-400 hover:text-slate-200 underline">Create a category…</a>`;
     }
@@ -300,6 +300,7 @@ function addToPlaylistForm({item, resultName, targetOptions, form, hasTargets, h
   ${backFields}
   <input type="hidden" name="name" value="${escapeHtml(resultName)}">
   <input type="hidden" name="infohash" value="${escapeHtml(item.infohash)}">
+  ${resultIcon ? `<input type="hidden" name="icon" value="${escapeHtml(resultIcon)}">` : ''}
   <select name="target" required class="text-xs bg-slate-950 border border-slate-800 hover:border-slate-600 rounded px-2 py-1 max-w-[10rem] truncate">
     ${placeholder}
     ${targetOptions}
@@ -323,7 +324,7 @@ function renderResultCard({result, targetOptions, hasTargets, hasPinnedTarget, f
         const bulkCheckbox = bulkEnabled && it.infohash
             ? `<label class="shrink-0 inline-flex items-center gap-1 text-xs text-slate-300 cursor-pointer">
     <input form="bulk-add-form" type="checkbox" name="channels"
-           value="${escapeHtml(JSON.stringify({name: result.name || '(unnamed)', infohash: it.infohash}))}"
+           value="${escapeHtml(JSON.stringify({name: result.name || '(unnamed)', infohash: it.infohash, icon: logo}))}"
            data-bulk-channel class="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500">
     Select
   </label>`
@@ -350,7 +351,7 @@ function renderResultCard({result, targetOptions, hasTargets, hasPinnedTarget, f
   </div>
   <div class="flex flex-wrap items-center gap-2 md:ml-2">
     ${bulkCheckbox}
-    ${addToPlaylistForm({item: it, resultName: result.name || '(unnamed)', targetOptions, form, hasTargets, hasPinnedTarget})}
+    ${addToPlaylistForm({item: it, resultName: result.name || '(unnamed)', resultIcon: logo, targetOptions, form, hasTargets, hasPinnedTarget})}
     ${streamButtons}
   </div>
 </li>`;
@@ -651,8 +652,8 @@ ${header({user, active: '/playlists'})}
       </div>
       <div class="flex items-start gap-2 text-sm">
         <span class="text-xs uppercase tracking-wide text-slate-500 w-14 shrink-0 pt-0.5">EPG</span>
-        <a class="text-indigo-400 hover:text-indigo-300 underline font-mono text-xs break-all" href="/${idAttr}/epg.xml">${escapeHtml(baseUrl)}/${idAttr}/epg.xml</a>
-        <button type="button" data-copy="${escapeHtml(baseUrl)}/${idAttr}/epg.xml"
+        <a class="text-indigo-400 hover:text-indigo-300 underline font-mono text-xs break-all" href="/iptv/epg.xml">${escapeHtml(baseUrl)}/iptv/epg.xml</a>
+        <button type="button" data-copy="${escapeHtml(baseUrl)}/iptv/epg.xml"
                 class="shrink-0 text-xs text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1">Copy</button>
       </div>
     </div>
@@ -786,7 +787,7 @@ ${header({user, active: '/settings'})}
 
     <hr class="border-slate-800">
     <h2 class="text-lg font-semibold">Public base URL</h2>
-    <p class="text-xs text-slate-500">The URL clients use to reach this proxy. Written into each playlist as <code class="text-slate-300">url-tvg="{base}/{id}/epg.xml"</code> so IPTV clients auto-load our EPG. Leave blank to use the configured default.</p>
+    <p class="text-xs text-slate-500">The URL clients use to reach this proxy. Written into each playlist as <code class="text-slate-300">url-tvg="{base}/iptv/epg.xml"</code> so IPTV clients auto-load our EPG. Leave blank to use the configured default.</p>
     ${field({
         name: 'publicBaseUrl',
         label: 'Public base URL',

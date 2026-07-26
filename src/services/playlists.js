@@ -29,6 +29,7 @@ function withDefaults(p) {
             id: c.id,
             name: c.name || '',
             infohash: (c.infohash || '').toLowerCase(),
+            icon: c.icon || '',
             categoryId: c.categoryId || '',
             addedAt: c.addedAt || new Date().toISOString(),
         })) : [],
@@ -212,7 +213,7 @@ async function removeCategory(id, categoryId) {
     });
 }
 
-async function addChannel(id, {name, infohash, categoryId}) {
+async function addChannel(id, {name, infohash, icon, categoryId}) {
     return withLock(async () => {
         const data = await readAll();
         const p = data.playlists.find((x) => x.id === id);
@@ -236,6 +237,7 @@ async function addChannel(id, {name, infohash, categoryId}) {
             id: chId,
             name: trimmedName,
             infohash: normalizedInfohash,
+            icon: (icon || '').trim(),
             categoryId,
             addedAt: new Date().toISOString(),
         };
@@ -258,12 +260,13 @@ async function addChannels(id, {channels, categoryId}) {
         for (const item of channels) {
             const infohash = String(item && item.infohash || '').toLowerCase();
             const name = String(item && item.name || '').trim();
+            const icon = String(item && item.icon || '').trim();
             if (!isValidInfohash(infohash)) throw fail('BAD_INFOHASH', 'Infohash must be a 40-char hex string.');
             if (!name) throw fail('BAD_NAME', 'Channel name is required.');
             // A Set makes repeated selections harmless and preserves the first name.
             if (selectedInfohashes.has(infohash)) continue;
             selectedInfohashes.add(infohash);
-            selected.push({infohash, name});
+            selected.push({infohash, name, icon});
         }
 
         const existing = new Set(
@@ -272,7 +275,7 @@ async function addChannels(id, {channels, categoryId}) {
         const existingIds = new Set(p.channels.map((c) => c.id));
         let added = 0;
         let skipped = 0;
-        for (const {infohash, name} of selected) {
+        for (const {infohash, name, icon} of selected) {
             if (existing.has(infohash)) {
                 skipped += 1;
                 continue;
@@ -290,6 +293,7 @@ async function addChannels(id, {channels, categoryId}) {
                 id: chId,
                 name,
                 infohash,
+                icon,
                 categoryId,
                 addedAt: new Date().toISOString(),
             });
