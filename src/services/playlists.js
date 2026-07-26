@@ -32,6 +32,9 @@ function withDefaults(p) {
             icon: c.icon || '',
             categoryId: c.categoryId || '',
             addedAt: c.addedAt || new Date().toISOString(),
+            bitrate: Number(c.bitrate) || 0,
+            availability: typeof c.availability === 'number' ? c.availability : null,
+            status: typeof c.status === 'number' ? c.status : null,
         })) : [],
     };
 }
@@ -213,7 +216,7 @@ async function removeCategory(id, categoryId) {
     });
 }
 
-async function addChannel(id, {name, infohash, icon, categoryId}) {
+async function addChannel(id, {name, infohash, icon, categoryId, bitrate}) {
     return withLock(async () => {
         const data = await readAll();
         const p = data.playlists.find((x) => x.id === id);
@@ -240,6 +243,7 @@ async function addChannel(id, {name, infohash, icon, categoryId}) {
             icon: (icon || '').trim(),
             categoryId,
             addedAt: new Date().toISOString(),
+            bitrate: Number(bitrate) || 0,
         };
         p.channels.push(channel);
         await writeAll(data);
@@ -261,12 +265,13 @@ async function addChannels(id, {channels, categoryId}) {
             const infohash = String(item && item.infohash || '').toLowerCase();
             const name = String(item && item.name || '').trim();
             const icon = String(item && item.icon || '').trim();
+            const bitrate = Number(item && item.bitrate) || 0;
             if (!isValidInfohash(infohash)) throw fail('BAD_INFOHASH', 'Infohash must be a 40-char hex string.');
             if (!name) throw fail('BAD_NAME', 'Channel name is required.');
             // A Set makes repeated selections harmless and preserves the first name.
             if (selectedInfohashes.has(infohash)) continue;
             selectedInfohashes.add(infohash);
-            selected.push({infohash, name, icon});
+            selected.push({infohash, name, icon, bitrate});
         }
 
         const existing = new Set(
@@ -275,7 +280,7 @@ async function addChannels(id, {channels, categoryId}) {
         const existingIds = new Set(p.channels.map((c) => c.id));
         let added = 0;
         let skipped = 0;
-        for (const {infohash, name, icon} of selected) {
+        for (const {infohash, name, icon, bitrate} of selected) {
             if (existing.has(infohash)) {
                 skipped += 1;
                 continue;
@@ -296,6 +301,7 @@ async function addChannels(id, {channels, categoryId}) {
                 icon,
                 categoryId,
                 addedAt: new Date().toISOString(),
+                bitrate: bitrate || 0,
             });
             existingIds.add(chId);
             existing.add(infohash);
@@ -303,6 +309,31 @@ async function addChannels(id, {channels, categoryId}) {
         }
         await writeAll(data);
         return {added, skipped};
+    });
+}
+
+async function refreshChannelStats(id, channelIndex) {
+    return withLock(async () => {
+        const data = await readAll();
+        const p = data.playlists.find((x) => x.id === id);
+        if (!p) throw fail('NOT_FOUND', 'Playlist not found.');
+        let updated = 0;
+        for (const ch of p.channels) {
+            const entry = channelIndex.get(ch.infohash.toLowerCase());
+            if (!entry) continue;
+            if (typeof entry.availability === 'number') ch.availability = entry.availability;
+            if (typeof entry.status === 'number') ch.status = entry.status;
+            if (entry.bitrate) ch.bitrate = entry.bitrate;
+            if (!ch.icon && entry.icons && entry.icons.length > 0) {
+                const type0 = entry.icons.find((i) => i && i.type === 0 && i.url);
+                const any = entry.icons.find((i) => i && i.url);
+                const picked = type0 || any;
+                if (picked) ch.icon = picked.url;
+            }
+            updated += 1;
+        }
+        await writeAll(data);
+        return {updated};
     });
 }
 
@@ -346,10 +377,8 @@ module.exports = {
     removeCategory,
     addChannel,
     addChannels,
+    refreshChannelStats,
     renameChannel,
     removeChannel,
     isValidId,
-    isValidInfohash,
-    ID_PATTERN,
-    INFOHASH_PATTERN,
 };

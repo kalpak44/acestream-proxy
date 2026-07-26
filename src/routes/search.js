@@ -70,11 +70,13 @@ router.get('/search', async (req, res) => {
         const enriched = results.map((r) => ({
             name: r.name || '',
             icons: r.icons || [],
-            items: (r.items || []).map((it) => ({
-                ...it,
-                streams: flavors.map((f) => ({...f, url: buildStreamUrl(it.infohash, {kind: f.kind})})),
-            })),
-        }));
+            items: (r.items || [])
+                .filter((it) => it.disabled !== true)
+                .map((it) => ({
+                    ...it,
+                    streams: flavors.map((f) => ({...f, url: buildStreamUrl(it.infohash, {kind: f.kind})})),
+                })),
+        })).filter((r) => r.items.length > 0);
         return res.type('html').send(renderSearch({
             ...view,
             results: enriched,
@@ -93,7 +95,7 @@ router.get('/search', async (req, res) => {
 });
 
 router.post('/search/add-channel', async (req, res) => {
-    const {target, name, infohash, icon} = req.body || {};
+    const {target, name, infohash, icon, bitrate} = req.body || {};
     const [playlistId, categoryId] = String(target || '').split(':');
     const backParams = new URLSearchParams();
     for (const k of ['q', 'category', 'page', 'page_size', 'target']) {
@@ -110,7 +112,7 @@ router.post('/search/add-channel', async (req, res) => {
     if (!playlistId || !categoryId) return res.redirect(backWith({error: 'Pick a playlist and category.'}));
 
     try {
-        await playlistsSvc.addChannel(playlistId, {name, infohash, icon, categoryId});
+        await playlistsSvc.addChannel(playlistId, {name, infohash, icon, categoryId, bitrate});
         try { await rebuild(playlistId); } catch (e) { logger.warn(`Rebuild after add-from-search failed: ${e.message}`); }
         logger.info(`Channel "${name}" added to ${playlistId}/${categoryId} from search by "${req.session.user}".`);
         return res.redirect(backWith({flash: `added:${playlistId}`}));

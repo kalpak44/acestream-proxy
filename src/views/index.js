@@ -4,6 +4,12 @@ function escapeHtml(value) {
     ));
 }
 
+function formatBitrate(bps) {
+    if (bps >= 1_000_000) return `${(bps / 1e6).toFixed(1)} Mbps`;
+    if (bps > 0) return `${Math.round(bps / 1000)} kbps`;
+    return '';
+}
+
 function layout({title, body}) {
     return `<!doctype html>
 <html lang="en" class="h-full">
@@ -44,13 +50,40 @@ function header({user, active = ''} = {}) {
       </nav>
     </div>
     <div class="flex items-center gap-4 text-sm text-slate-400">
+      <span id="engine-badge" class="hidden items-center gap-1.5 text-xs px-2 py-1 rounded-full border"></span>
       <span>Signed in as <span class="text-slate-200">${escapeHtml(user)}</span></span>
       <form method="post" action="/logout">
         <button class="text-slate-300 hover:text-white underline underline-offset-4 decoration-slate-600 hover:decoration-white">Sign out</button>
       </form>
     </div>
   </div>
-</header>`;
+</header>
+<script>
+(function() {
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  var badge = document.getElementById('engine-badge');
+  if (!badge) return;
+  fetch('/api/engine/status')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        badge.className = 'flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border border-emerald-800 bg-emerald-950/40 text-emerald-400';
+        badge.innerHTML = '<span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400"></span>Engine ' + escHtml(d.version);
+      } else {
+        badge.className = 'flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border border-rose-800 bg-rose-950/40 text-rose-400';
+        badge.innerHTML = '<span class="inline-block h-1.5 w-1.5 rounded-full bg-rose-400"></span>Engine offline';
+      }
+    })
+    .catch(function() {
+      badge.className = 'flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border border-rose-800 bg-rose-950/40 text-rose-400';
+      badge.innerHTML = '<span class="inline-block h-1.5 w-1.5 rounded-full bg-rose-400"></span>Engine offline';
+    });
+})();
+</script>`;
 }
 
 function renderLogin({error} = {}) {
@@ -104,6 +137,7 @@ function parseFlash(flash) {
     if (kind === 'channel-added') return 'Channel added.';
     if (kind === 'channel-removed') return 'Channel removed.';
     if (kind === 'channel-updated') return 'Channel renamed.';
+    if (kind === 'availability-refreshed') return 'Availability refreshed.';
     return null;
 }
 
@@ -301,6 +335,7 @@ function addToPlaylistForm({item, resultName, resultIcon, targetOptions, form, h
   ${backFields}
   <input type="hidden" name="name" value="${escapeHtml(resultName)}">
   <input type="hidden" name="infohash" value="${escapeHtml(item.infohash)}">
+  <input type="hidden" name="bitrate" value="${escapeHtml(String(item.bitrate || 0))}">
   ${resultIcon ? `<input type="hidden" name="icon" value="${escapeHtml(resultIcon)}">` : ''}
   <select name="target" required class="text-xs bg-slate-950 border border-slate-800 hover:border-slate-600 rounded px-2 py-1 max-w-[10rem] truncate">
     ${placeholder}
@@ -325,7 +360,7 @@ function renderResultCard({result, targetOptions, hasTargets, hasPinnedTarget, f
         const bulkCheckbox = bulkEnabled && it.infohash
             ? `<label class="shrink-0 inline-flex items-center gap-1 text-xs text-slate-300 cursor-pointer">
     <input form="bulk-add-form" type="checkbox" name="channels"
-           value="${escapeHtml(JSON.stringify({name: result.name || '(unnamed)', infohash: it.infohash, icon: logo}))}"
+           value="${escapeHtml(JSON.stringify({name: result.name || '(unnamed)', infohash: it.infohash, icon: logo, bitrate: it.bitrate || 0}))}"
            data-bulk-channel class="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500">
     Select
   </label>`
@@ -343,6 +378,7 @@ function renderResultCard({result, targetOptions, hasTargets, hasPinnedTarget, f
 <li class="flex flex-col gap-2 rounded-lg bg-slate-950/50 border border-slate-800 p-3 md:flex-row md:items-center md:gap-4">
   <div class="min-w-0 flex-1">
     <div class="font-mono text-xs text-slate-300 break-all">${escapeHtml(it.infohash || '')}</div>
+    ${it.bitrate ? `<div class="text-xs text-slate-500 mt-0.5">${formatBitrate(it.bitrate)}</div>` : ''}
     ${it.name && it.name !== result.name ? `<div class="text-xs text-slate-500 mt-1">${escapeHtml(it.name)}</div>` : ''}
     ${tags ? `<div class="mt-2 flex flex-wrap gap-1">${tags}</div>` : ''}
   </div>
@@ -578,7 +614,15 @@ function renderPlaylistDetail({user, playlist, baseUrl, lastBuiltAt, fileBytes, 
         .filter(([, list]) => list.length > 0)
         .map(([cid, list]) => {
             const catName = categoriesById.get(cid)?.name || '(unknown)';
-            const rows = list.map((ch) => `
+            const rows = list.map((ch) => {
+                const avail = ch.availability;
+                let dotColor;
+                if (avail === null || avail === undefined) dotColor = 'bg-slate-500';
+                else if (avail >= 0.8) dotColor = 'bg-emerald-400';
+                else if (avail >= 0.5) dotColor = 'bg-amber-400';
+                else dotColor = 'bg-rose-400';
+                const bitrateText = ch.bitrate ? formatBitrate(ch.bitrate) : '';
+                return `
 <tr class="border-t border-slate-800">
   <td class="px-3 py-2">
     <form method="post" action="/playlists/${idAttr}/channels/${escapeHtml(ch.id)}/update" class="flex items-center gap-2">
@@ -588,13 +632,20 @@ function renderPlaylistDetail({user, playlist, baseUrl, lastBuiltAt, fileBytes, 
     </form>
   </td>
   <td class="px-3 py-2 font-mono text-xs text-slate-400 break-all">${escapeHtml(ch.infohash)}</td>
-  <td class="px-3 py-2 text-xs text-slate-500">${escapeHtml(ch.addedAt)}</td>
+  <td class="px-3 py-2 text-xs text-slate-500">
+    <div class="flex items-center gap-1.5">
+      <span class="inline-block h-1.5 w-1.5 rounded-full ${dotColor}"></span>
+      ${bitrateText ? `<span>${escapeHtml(bitrateText)}</span>` : ''}
+    </div>
+    <div class="text-slate-600 mt-0.5">${escapeHtml(ch.addedAt)}</div>
+  </td>
   <td class="px-3 py-2 text-right">
     <form method="post" action="/playlists/${idAttr}/channels/${escapeHtml(ch.id)}/delete">
       <button class="text-xs text-rose-400 hover:text-rose-300">Remove</button>
     </form>
   </td>
-</tr>`).join('');
+</tr>`;
+            }).join('');
             return `
 <section class="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
   <header class="px-3 py-2 bg-slate-900/70 text-xs uppercase tracking-wide text-slate-400">${escapeHtml(catName)} · ${list.length}</header>
@@ -699,7 +750,12 @@ ${header({user, active: '/playlists'})}
   <section class="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-4">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold">Channels</h2>
-      <span class="text-xs text-slate-500">${playlist.channels.length} total</span>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-slate-500">${playlist.channels.length} total</span>
+        <form method="post" action="/playlists/${idAttr}/refresh-availability">
+          <button class="text-xs text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1">Refresh availability</button>
+        </form>
+      </div>
     </div>
     ${channelsSection}
     <div class="pt-2 border-t border-slate-800">${addChannelForm}</div>

@@ -7,6 +7,7 @@ const publicPlaylistRoutes = require('./routes/publicPlaylist');
 const playlistsRoutes = require('./routes/playlists');
 const searchRoutes = require('./routes/search');
 const settingsRoutes = require('./routes/settings');
+const apiRoutes = require('./routes/api');
 
 const app = express();
 if (TRUST_PROXY) app.set('trust proxy', 1);
@@ -21,5 +22,6 @@ app.use('/', uiRoutes);
 app.use('/', playlistsRoutes);
 app.use('/', searchRoutes);
 app.use('/', settingsRoutes);
+app.use('/', apiRoutes);
 
 module.exports = app;

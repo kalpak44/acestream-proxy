@@ -70,6 +70,10 @@ async function fetchEpgIndex() {
                 index.set(item.infohash.toLowerCase(), {
                     epg: r.epg || [],
                     icons: r.icons || [],
+                    availability: typeof item.availability === 'number' ? item.availability : null,
+                    status: typeof item.status === 'number' ? item.status : null,
+                    bitrate: item.bitrate || 0,
+                    disabled: item.disabled || false,
                 });
             }
         }

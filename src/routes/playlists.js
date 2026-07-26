@@ -1,8 +1,10 @@
+const fs = require('fs-extra');
 const express = require('express');
 const logger = require('../logger');
 const {requireAuth} = require('../services/auth');
 const playlistsSvc = require('../services/playlists');
 const {playlistFilePath, removePlaylistFile, rebuild} = require('../services/playlistBuilder');
+const {fetchEpgIndex} = require('../services/acestream');
 const {renderPlaylists, renderPlaylistDetail} = require('../views');
 
 const router = express.Router();
@@ -191,6 +193,21 @@ router.post('/playlists/:id/channels/:channelId/update', async (req, res) => {
         if (['BAD_NAME', 'NOT_FOUND'].includes(err.code)) return redirectDetailWithError(res, id, err.message);
         logger.error(`Rename channel failed: ${err.message}`);
         redirectDetailWithError(res, id, 'Failed to rename channel.');
+    }
+});
+
+router.post('/playlists/:id/refresh-availability', async (req, res) => {
+    const {id} = req.params;
+    try {
+        const channelIndex = await fetchEpgIndex();
+        const result = await playlistsSvc.refreshChannelStats(id, channelIndex);
+        logger.info(`Availability refreshed for playlist ${id} by "${req.session.user}": ${result.updated} channels updated.`);
+        await fireRebuild(id, req.session.user);
+        redirectDetailWithFlash(res, id, 'availability-refreshed');
+    } catch (err) {
+        if (err.code === 'NOT_FOUND') return redirectWithError(res, 'Playlist not found.');
+        logger.error(`Refresh availability failed for playlist ${id}: ${err.message}`);
+        redirectDetailWithError(res, id, 'Failed to refresh availability.');
     }
 });
 
