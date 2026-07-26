@@ -181,6 +181,19 @@ router.post('/playlists/:id/channels', async (req, res) => {
     }
 });
 
+router.post('/playlists/:id/channels/:channelId/update', async (req, res) => {
+    const {id, channelId} = req.params;
+    try {
+        await playlistsSvc.renameChannel(id, channelId, {name: req.body && req.body.name});
+        await fireRebuild(id, req.session.user);
+        redirectDetailWithFlash(res, id, 'channel-updated');
+    } catch (err) {
+        if (['BAD_NAME', 'NOT_FOUND'].includes(err.code)) return redirectDetailWithError(res, id, err.message);
+        logger.error(`Rename channel failed: ${err.message}`);
+        redirectDetailWithError(res, id, 'Failed to rename channel.');
+    }
+});
+
 router.post('/playlists/:id/channels/:channelId/delete', async (req, res) => {
     const {id, channelId} = req.params;
     try {

@@ -306,6 +306,21 @@ async function addChannels(id, {channels, categoryId}) {
     });
 }
 
+async function renameChannel(id, channelId, {name}) {
+    return withLock(async () => {
+        const data = await readAll();
+        const p = data.playlists.find((x) => x.id === id);
+        if (!p) throw fail('NOT_FOUND', 'Playlist not found.');
+        const ch = p.channels.find((c) => c.id === channelId);
+        if (!ch) throw fail('NOT_FOUND', 'Channel not found.');
+        const trimmed = (name || '').trim();
+        if (!trimmed) throw fail('BAD_NAME', 'Channel name is required.');
+        ch.name = trimmed;
+        await writeAll(data);
+        return ch;
+    });
+}
+
 async function removeChannel(id, channelId) {
     return withLock(async () => {
         const data = await readAll();
@@ -331,6 +346,7 @@ module.exports = {
     removeCategory,
     addChannel,
     addChannels,
+    renameChannel,
     removeChannel,
     isValidId,
     isValidInfohash,

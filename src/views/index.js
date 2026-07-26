@@ -103,6 +103,7 @@ function parseFlash(flash) {
     if (kind === 'category-removed') return 'Category removed.';
     if (kind === 'channel-added') return 'Channel added.';
     if (kind === 'channel-removed') return 'Channel removed.';
+    if (kind === 'channel-updated') return 'Channel renamed.';
     return null;
 }
 
@@ -579,7 +580,13 @@ function renderPlaylistDetail({user, playlist, baseUrl, lastBuiltAt, fileBytes, 
             const catName = categoriesById.get(cid)?.name || '(unknown)';
             const rows = list.map((ch) => `
 <tr class="border-t border-slate-800">
-  <td class="px-3 py-2 text-sm">${escapeHtml(ch.name)}</td>
+  <td class="px-3 py-2">
+    <form method="post" action="/playlists/${idAttr}/channels/${escapeHtml(ch.id)}/update" class="flex items-center gap-2">
+      <input name="name" value="${escapeHtml(ch.name)}" required
+             class="flex-1 min-w-0 rounded-md bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 px-2 py-1 text-sm">
+      <button class="shrink-0 text-xs text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1">Save</button>
+    </form>
+  </td>
   <td class="px-3 py-2 font-mono text-xs text-slate-400 break-all">${escapeHtml(ch.infohash)}</td>
   <td class="px-3 py-2 text-xs text-slate-500">${escapeHtml(ch.addedAt)}</td>
   <td class="px-3 py-2 text-right">
