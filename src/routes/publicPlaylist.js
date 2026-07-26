@@ -4,6 +4,7 @@ const path = require('node:path');
 const playlistsSvc = require('../services/playlists');
 const {playlistFilePath, epgFilePath, rebuild} = require('../services/playlistBuilder');
 const {buildCombinedEpgFile, combinedEpgFilePath} = require('../services/epgBuilder');
+const {fetchEpgIndex} = require('../services/acestream');
 
 const router = express.Router();
 
@@ -45,8 +46,11 @@ async function servePublicFile(req, res, {id, filePath, headers, missingMessage}
 router.all('/iptv/epg.xml', async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).end();
     try {
-        const allPlaylists = await playlistsSvc.list();
-        await buildCombinedEpgFile(allPlaylists);
+        const [allPlaylists, epgIndex] = await Promise.all([
+            playlistsSvc.list(),
+            fetchEpgIndex().catch(() => new Map()),
+        ]);
+        await buildCombinedEpgFile(allPlaylists, epgIndex);
     } catch (_) {
         return res.status(503).send('EPG not available.');
     }

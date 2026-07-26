@@ -56,8 +56,30 @@ async function searchChannels({query = '', category = '', page = 0, pageSize} = 
     };
 }
 
+async function fetchEpgIndex() {
+    const s = settings.effective();
+    const response = await axios.get(s.engineSearchUrl, {
+        params: {page: 0, page_size: 1500},
+        timeout: 30000,
+    });
+    const results = (response.data && response.data.result && response.data.result.results) || [];
+    const index = new Map();
+    for (const r of results) {
+        for (const item of (r.items || [])) {
+            if (item.infohash) {
+                index.set(item.infohash.toLowerCase(), {
+                    epg: r.epg || [],
+                    icons: r.icons || [],
+                });
+            }
+        }
+    }
+    return index;
+}
+
 module.exports = {
     searchChannels,
+    fetchEpgIndex,
     buildStreamUrl,
     SEARCH_CATEGORIES,
     STREAM_KINDS,

@@ -4,7 +4,7 @@ const config = require('../config');
 const logger = require('../logger');
 const playlists = require('./playlists');
 const settings = require('./settings');
-const {buildStreamUrl} = require('./acestream');
+const {buildStreamUrl, fetchEpgIndex} = require('./acestream');
 const {buildEpgFile, buildCombinedEpgFile, removeEpgFile, epgFilePath} = require('./epgBuilder');
 
 const rebuildLocks = new Map();
@@ -61,9 +61,11 @@ async function buildPlaylistFile(playlist) {
     const {content, skipped} = renderPlaylist(playlist);
     await fs.writeFile(tmp, content);
     await fs.move(tmp, target, {overwrite: true});
-    const epg = await buildEpgFile(playlist);
+    let epgIndex = new Map();
+    try { epgIndex = await fetchEpgIndex(); } catch (_) {}
+    const epg = await buildEpgFile(playlist, epgIndex);
     const allPlaylists = await playlists.list();
-    const combinedEpg = await buildCombinedEpgFile(allPlaylists);
+    const combinedEpg = await buildCombinedEpgFile(allPlaylists, epgIndex);
     if (skipped > 0) {
         logger.warn(`Playlist "${playlist.name}" (${playlist.id}): skipped ${skipped} channel(s) — no stream base URL configured for kind "${playlist.streamKind || 'ts'}".`);
     }
