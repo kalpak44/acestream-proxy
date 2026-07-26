@@ -1,9 +1,8 @@
 const express = require('express');
-const fs = require('fs-extra');
 const logger = require('../logger');
 const {requireAuth} = require('../services/auth');
 const playlistsSvc = require('../services/playlists');
-const {playlistFilePath, removePlaylistFile, rebuild} = require('../services/playlistBuilder');
+const {removePlaylistFile, rebuild} = require('../services/playlistBuilder');
 const {renderPlaylists, renderPlaylistDetail} = require('../views');
 
 const router = express.Router();
@@ -63,16 +62,9 @@ router.post('/playlists/:id/update', async (req, res) => {
         const p = await playlistsSvc.update(oldId, {id: newId, name});
         logger.info(`Playlist updated ${oldId} -> id="${p.id}" name="${p.name}" by "${req.session.user}".`);
         if (p.id !== oldId) {
-            const oldPath = playlistFilePath(oldId);
-            const newPath = playlistFilePath(p.id);
-            try {
-                if (await fs.pathExists(oldPath)) {
-                    await fs.move(oldPath, newPath, {overwrite: true});
-                }
-            } catch (moveErr) {
-                logger.warn(`Failed to move playlist file for ${oldId} -> ${p.id}: ${moveErr.message}`);
-            }
+            await removePlaylistFile(oldId).catch((err) => logger.warn(`Cleanup after playlist ID change failed for ${oldId}: ${err.message}`));
         }
+        await fireRebuild(p.id, req.session.user);
         res.redirect(`/playlists?flash=updated:${encodeURIComponent(p.id)}`);
     } catch (err) {
         if (err.code === 'NOT_FOUND') return redirectWithError(res, 'Playlist not found.');
@@ -135,6 +127,7 @@ router.post('/playlists/:id/categories', async (req, res) => {
     try {
         const cat = await playlistsSvc.addCategory(id, {name: req.body && req.body.name});
         logger.info(`Playlist ${id} category "${cat.name}" added by "${req.session.user}".`);
+        await fireRebuild(id, req.session.user);
         redirectDetailWithFlash(res, id, `category-added:${cat.id}`);
     } catch (err) {
         if (['BAD_NAME', 'DUP_NAME'].includes(err.code)) return redirectDetailWithError(res, id, err.message);

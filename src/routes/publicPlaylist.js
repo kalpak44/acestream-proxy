@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs-extra');
 const path = require('node:path');
 const playlistsSvc = require('../services/playlists');
-const {playlistFilePath, epgFilePath} = require('../services/playlistBuilder');
+const {playlistFilePath, epgFilePath, rebuild} = require('../services/playlistBuilder');
 
 const router = express.Router();
 
@@ -23,6 +23,15 @@ async function servePublicFile(req, res, {id, filePath, headers, missingMessage}
     if (!playlistsSvc.isValidId(id)) return res.status(404).send('Not found');
     const playlist = await playlistsSvc.get(id);
     if (!playlist) return res.status(404).send('Not found');
+
+    try {
+        // The generated M3U and XMLTV files are derived caches. Rebuild on
+        // every public request so stream/EPG base URLs and channel changes in
+        // Settings are reflected immediately.
+        await rebuild(id);
+    } catch (_) {
+        return res.status(503).send(missingMessage);
+    }
 
     const exists = await fs.pathExists(filePath);
     if (!exists) return res.status(503).send(missingMessage);

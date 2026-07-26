@@ -1,7 +1,7 @@
 {
   "name": "acestream-proxy",
   "version": "1.0.0",
-  "description": "A tiny Node.js service that queries an Ace Stream search endpoint, converts the results into an IPTV‑friendly M3U8 playlist, and serves it over HTTP. It enriches entries with EPG titles (when available), channel logos, and group information. As of the latest update, each channel also includes an `#EXTGRP:` line for improved compatibility with IPTV players that rely on this tag.",
+  "description": "Manage curated AceStream IPTV playlists, serve M3U playlists with generated XMLTV EPG over HTTP, and search and bulk-add channels from the AceStream engine.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

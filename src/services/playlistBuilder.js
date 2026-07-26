@@ -7,6 +7,8 @@ const settings = require('./settings');
 const {buildStreamUrl} = require('./acestream');
 const {buildEpgFile, removeEpgFile, epgFilePath} = require('./epgBuilder');
 
+const rebuildLocks = new Map();
+
 function playlistFilePath(id) {
     return path.join(config.DATA_DIR, 'playlists', `${id}.m3u8`);
 }
@@ -78,12 +80,24 @@ async function removePlaylistFile(id) {
     ]);
 }
 
-async function rebuild(id) {
+async function rebuildNow(id) {
     const playlist = await playlists.get(id);
     if (!playlist) throw new Error(`Playlist ${id} not found`);
     const result = await buildPlaylistFile(playlist);
     logger.info(`Playlist "${playlist.name}" (${playlist.id}) built: ${result.itemCount} channels, ${result.bytes} bytes (EPG ${result.epg.bytes} bytes).`);
     return result;
+}
+
+// Mutations and simultaneous player requests may ask for the same generated
+// files at once. Serialize each playlist so the atomic file replacement stays
+// coherent and every response reflects the current settings and playlist data.
+function rebuild(id) {
+    const previous = rebuildLocks.get(id) || Promise.resolve();
+    const next = previous.catch(() => {}).then(() => rebuildNow(id));
+    rebuildLocks.set(id, next);
+    return next.finally(() => {
+        if (rebuildLocks.get(id) === next) rebuildLocks.delete(id);
+    });
 }
 
 module.exports = {buildPlaylistFile, removePlaylistFile, playlistFilePath, epgFilePath, rebuild};
